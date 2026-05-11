@@ -1,6 +1,6 @@
 # InterceptorX
 
-A web application security testing platform inspired by Burp Suite — intercepts HTTP/HTTPS traffic and automatically detects vulnerabilities.
+Passive and active web application security testing platform featuring HTTP/HTTPS interception, request replay, vulnerability pattern analysis, JWT inspection, and interactive traffic analysis dashboards.
 
 ## Features
 
