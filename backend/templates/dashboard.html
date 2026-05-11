@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>InterceptorX Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #38bdf8;
+            letter-spacing: 2px;
+        }
+
+        .logo span { color: #f472b6; }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .btn-danger {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        .btn-danger:hover { background: #991b1b; }
+
+        /* Stats */
+        .stats {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            flex: 1;
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 16px 20px;
+            border-left: 4px solid;
+        }
+
+        .stat-card.total  { border-color: #38bdf8; }
+        .stat-card.high   { border-color: #ef4444; }
+        .stat-card.medium { border-color: #f59e0b; }
+        .stat-card.safe   { border-color: #22c55e; }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .stat-card.total  .stat-number { color: #38bdf8; }
+        .stat-card.high   .stat-number { color: #ef4444; }
+        .stat-card.medium .stat-number { color: #f59e0b; }
+        .stat-card.safe   .stat-number { color: #22c55e; }
+
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        /* Search */
+        .search-bar {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 16px;
+            color: #e2e8f0;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            outline: none;
+        }
+
+        .search-bar input:focus { border-color: #38bdf8; }
+
+        .filter-btns { display: flex; gap: 6px; }
+
+        .filter-btn {
+            padding: 8px 14px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            background: #1e293b;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            border-color: #38bdf8;
+            color: #38bdf8;
+        }
+
+        .filter-btn.f-high.active   { border-color: #ef4444; color: #ef4444; }
+        .filter-btn.f-medium.active { border-color: #f59e0b; color: #f59e0b; }
+        .filter-btn.f-safe.active   { border-color: #22c55e; color: #22c55e; }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #1e293b;
+            padding: 12px 14px;
+            text-align: left;
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        td {
+            padding: 12px 14px;
+            border-bottom: 1px solid #1e293b;
+            vertical-align: top;
+            font-size: 13px;
+        }
+
+        tr.data-row:hover { background: #1e293b; cursor: pointer; }
+
+        .method-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .method-GET    { background: #064e3b; color: #6ee7b7; }
+        .method-POST   { background: #1e3a5f; color: #93c5fd; }
+        .method-PUT    { background: #451a03; color: #fcd34d; }
+        .method-DELETE { background: #450a0a; color: #fca5a5; }
+        .method-PATCH  { background: #3b0764; color: #d8b4fe; }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .sev-HIGH   { background: #450a0a; color: #ef4444; }
+        .sev-MEDIUM { background: #451a03; color: #f59e0b; }
+        .sev-INFO   { background: #0c1a3b; color: #60a5fa; }
+        .sev-SAFE   { background: #052e16; color: #22c55e; }
+
+        .url-cell {
+            max-width: 420px;
+            word-break: break-all;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .finding-item {
+            font-size: 11px;
+            margin-bottom: 3px;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .finding-HIGH   { color: #ef4444; }
+        .finding-MEDIUM { color: #f59e0b; }
+        .finding-INFO   { color: #60a5fa; }
+
+        .no-data {
+            text-align: center;
+            padding: 60px;
+            color: #475569;
+        }
+
+        .refresh-note {
+            font-size: 11px;
+            color: #475569;
+            margin-top: 12px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="logo">Interceptor<span>X</span></div>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <span style="font-size:12px;color:#475569;">Auto-refresh: <span id="countdown">30</span>s</span>
+        <button class="btn btn-danger" onclick="clearTraffic()">Clear Log</button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+    <div class="stat-card total">
+        <div class="stat-number">{{ stats.total }}</div>
+        <div class="stat-label">Total Requests</div>
+    </div>
+    <div class="stat-card high">
+        <div class="stat-number">{{ stats.high }}</div>
+        <div class="stat-label">High Severity</div>
+    </div>
+    <div class="stat-card medium">
+        <div class="stat-number">{{ stats.medium }}</div>
+        <div class="stat-label">Medium Severity</div>
+    </div>
+    <div class="stat-card safe">
+        <div class="stat-number">{{ stats.safe }}</div>
+        <div class="stat-label">Clean Requests</div>
+    </div>
+</div>
+
+<!-- Search & Filter -->
+<div class="search-bar">
+    <input type="text" id="searchInput" placeholder="Search URL, method, finding..." oninput="filterTable()">
+    <div class="filter-btns">
+        <button class="filter-btn active" data-filter="ALL" onclick="setFilter('ALL', this)">All</button>
+        <button class="filter-btn f-high"   data-filter="HIGH"   onclick="setFilter('HIGH', this)">🔴 High</button>
+        <button class="filter-btn f-medium" data-filter="MEDIUM" onclick="setFilter('MEDIUM', this)">🟡 Medium</button>
+        <button class="filter-btn f-safe"   data-filter="SAFE"   onclick="setFilter('SAFE', this)">🟢 Safe</button>
+    </div>
+</div>
+
+<!-- Table -->
+<table id="trafficTable">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Method</th>
+            <th>URL</th>
+            <th>Status</th>
+            <th>Severity</th>
+            <th>Findings</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in traffic %}
+        <tr class="data-row"
+            data-url="{{ item.url }}"
+            data-method="{{ item.method }}"
+            data-severity="{{ item.severity }}"
+            onclick="window.location='/request/{{ item.id }}'">
+
+            <td style="color:#475569;">{{ item.id }}</td>
+
+            <td>
+                <span class="method-badge method-{{ item.method }}">{{ item.method }}</span>
+            </td>
+
+            <td class="url-cell">{{ item.url }}</td>
+
+            <td>
+                {% if item.status_code >= 500 %}
+                    <span style="color:#ef4444;font-weight:bold;">{{ item.status_code }}</span>
+                {% elif item.status_code >= 400 %}
+                    <span style="color:#f59e0b;font-weight:bold;">{{ item.status_code }}</span>
+                {% elif item.status_code >= 300 %}
+                    <span style="color:#60a5fa;font-weight:bold;">{{ item.status_code }}</span>
+                {% else %}
+                    <span style="color:#22c55e;font-weight:bold;">{{ item.status_code }}</span>
+                {% endif %}
+            </td>
+
+            <td>
+                <span class="severity-badge sev-{{ item.severity }}">{{ item.severity }}</span>
+            </td>
+
+            <td>
+                {% if item.findings %}
+                    {% for f in item.findings[:3] %}
+                        <div class="finding-item finding-{{ f.severity }}">↳ {{ f.type }}</div>
+                    {% endfor %}
+                    {% if item.findings|length > 3 %}
+                        <div style="font-size:11px;color:#475569;">+{{ item.findings|length - 3 }} more</div>
+                    {% endif %}
+                {% else %}
+                    <span style="color:#475569;font-size:12px;">No issues</span>
+                {% endif %}
+            </td>
+
+            <td style="color:#475569;font-size:11px;white-space:nowrap;">{{ item.timestamp }}</td>
+        </tr>
+        {% endfor %}
+
+        {% if not traffic %}
+        <tr>
+            <td colspan="7" class="no-data">
+                No traffic captured yet.<br>
+                <span style="font-size:13px;">Start mitmproxy and browse the web.</span>
+            </td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+
+<div class="refresh-note">Showing latest 100 requests</div>
+
+<script>
+    let activeFilter = "ALL";
+
+    function setFilter(filter, btn) {
+        activeFilter = filter;
+        document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        filterTable();
+    }
+
+    function filterTable() {
+        const search = document.getElementById("searchInput").value.toLowerCase();
+        document.querySelectorAll(".data-row").forEach(row => {
+            const url = row.dataset.url.toLowerCase();
+            const method = row.dataset.method.toLowerCase();
+            const severity = row.dataset.severity;
+            const text = row.textContent.toLowerCase();
+
+            const matchesSearch = !search || url.includes(search) || method.includes(search) || text.includes(search);
+            const matchesFilter = activeFilter === "ALL" || severity === activeFilter;
+
+            row.style.display = (matchesSearch && matchesFilter) ? "" : "none";
+        });
+    }
+
+    function clearTraffic() {
+        if (!confirm("Clear all traffic logs?")) return;
+        fetch("/clear", { method: "POST" })
+            .then(() => location.reload());
+    }
+
+    // Auto-refresh countdown
+    let countdown = 30;
+    setInterval(() => {
+        countdown--;
+        document.getElementById("countdown").textContent = countdown;
+        if (countdown <= 0) location.reload();
+    }, 1000);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Request #{{ req.id }} — InterceptorX</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+            padding: 24px;
+        }
+
+        a {
+            color: #38bdf8;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        a:hover { text-decoration: underline; }
+
+        h1 {
+            font-size: 20px;
+            color: #38bdf8;
+            margin: 16px 0 20px;
+        }
+
+        /* Meta row */
+        .meta-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .meta-pill {
+            background: #1e293b;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+
+        .meta-pill span { color: #94a3b8; margin-right: 6px; }
+
+        .method-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .method-GET    { background: #064e3b; color: #6ee7b7; }
+        .method-POST   { background: #1e3a5f; color: #93c5fd; }
+        .method-PUT    { background: #451a03; color: #fcd34d; }
+        .method-DELETE { background: #450a0a; color: #fca5a5; }
+        .method-PATCH  { background: #3b0764; color: #d8b4fe; }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .sev-HIGH   { background: #450a0a; color: #ef4444; }
+        .sev-MEDIUM { background: #451a03; color: #f59e0b; }
+        .sev-INFO   { background: #0c1a3b; color: #60a5fa; }
+        .sev-SAFE   { background: #052e16; color: #22c55e; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid #1e293b;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            color: #475569;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+        .tab-btn:hover  { color: #94a3b8; }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Cards */
+        .card {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .card h2 {
+            font-size: 14px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+
+        pre {
+            background: #0f172a;
+            padding: 14px;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+            color: #94a3b8;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Findings */
+        .finding-card {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-left: 3px solid;
+        }
+
+        .finding-HIGH   { border-color: #ef4444; }
+        .finding-MEDIUM { border-color: #f59e0b; }
+        .finding-INFO   { border-color: #60a5fa; }
+
+        .finding-title { font-size: 13px; font-weight: bold; }
+        .finding-HIGH   .finding-title { color: #ef4444; }
+        .finding-MEDIUM .finding-title { color: #f59e0b; }
+        .finding-INFO   .finding-title { color: #60a5fa; }
+
+        .finding-detail { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+        /* Repeater */
+        .repeater-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        textarea {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus { border-color: #38bdf8; }
+
+        .url-input {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            outline: none;
+            margin-bottom: 10px;
+        }
+
+        .url-input:focus { border-color: #38bdf8; }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+
+        .btn-primary { background: #0369a1; color: #e0f2fe; }
+        .btn-primary:hover { background: #0284c7; }
+
+        .status-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        /* JWT */
+        .jwt-input-area {
+            margin-bottom: 16px;
+        }
+
+        .jwt-part {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .jwt-part-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .label-header  { color: #f472b6; }
+        .label-payload { color: #38bdf8; }
+        .label-sig     { color: #a78bfa; }
+
+        .jwt-json { font-size: 12px; color: #94a3b8; }
+
+        .jwt-key   { color: #38bdf8; }
+        .jwt-value { color: #86efac; }
+        .jwt-num   { color: #f59e0b; }
+
+        .loading { color: #475569; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<a href="/dashboard">← Back to Dashboard</a>
+
+<h1>Request #{{ req.id }}</h1>
+
+<!-- Meta -->
+<div class="meta-row">
+    <div class="meta-pill">
+        <span>Method</span>
+        <span class="method-badge method-{{ req.method }}">{{ req.method }}</span>
+    </div>
+    <div class="meta-pill">
+        <span>Status</span>{{ req.status_code }}
+    </div>
+    <div class="meta-pill">
+        <span>Severity</span>
+        <span class="severity-badge sev-{{ req.severity }}">{{ req.severity }}</span>
+    </div>
+    <div class="meta-pill">
+        <span>Time</span>{{ req.timestamp }}
+    </div>
+</div>
+
+<div class="meta-pill" style="margin-bottom:20px;word-break:break-all;">
+    <span>URL</span>{{ req.url }}
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('findings', this)">🔍 Findings ({{ req.findings|length }})</button>
+    <button class="tab-btn" onclick="switchTab('request', this)">📤 Request</button>
+    <button class="tab-btn" onclick="switchTab('response', this)">📥 Response</button>
+    <button class="tab-btn" onclick="switchTab('repeater', this)">🔁 Repeater</button>
+    <button class="tab-btn" onclick="switchTab('jwt', this)">🔐 JWT Decoder</button>
+</div>
+
+<!-- Findings Tab -->
+<div id="tab-findings" class="tab-panel active">
+    {% if req.findings %}
+        {% for f in req.findings %}
+        <div class="finding-card finding-{{ f.severity }}">
+            <div class="finding-title">{{ f.type }}</div>
+            <div class="finding-detail">{{ f.detail }}</div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="card" style="color:#22c55e;">✅ No vulnerabilities detected in this request.</div>
+    {% endif %}
+</div>
+
+<!-- Request Tab -->
+<div id="tab-request" class="tab-panel">
+    <div class="card">
+        <h2>Request Headers</h2>
+        <pre>{% for k, v in req.request_headers.items() %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+    </div>
+    <div class="card">
+        <h2>Request Body</h2>
+        <pre>{{ req.request_body if req.request_body else '(empty)' }}</pre>
+    </div>
+</div>
+
+<!-- Response Tab -->
+<div id="tab-response" class="tab-panel">
+    <div class="card">
+        <h2>Response Headers</h2>
+        <pre>{% for k, v in req.response_headers.items() %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+    </div>
+    <div class="card">
+        <h2>Response Body</h2>
+        <pre id="responseBodyPre">{{ req.response_body[:20000] if req.response_body else '(empty)' }}</pre>
+    </div>
+</div>
+
+<!-- Repeater Tab -->
+<div id="tab-repeater" class="tab-panel">
+    <div class="card">
+        <h2>Request Repeater</h2>
+        <p style="font-size:12px;color:#475569;margin-bottom:12px;">Modify and resend this request. Edit the URL, headers, or body below.</p>
+
+        <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">URL</label>
+        <input type="text" class="url-input" id="repeatUrl" value="{{ req.url }}">
+
+        <div class="repeater-grid">
+            <div>
+                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;">Headers (JSON)</label>
+                <textarea id="repeatHeaders" rows="14">{{ req.request_headers | tojson(indent=2) }}</textarea>
+            </div>
+            <div>
+                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;">Body</label>
+                <textarea id="repeatBody" rows="14">{{ req.request_body }}</textarea>
+            </div>
+        </div>
+
+        <br>
+        <button class="btn btn-primary" onclick="sendRepeat()">▶ Send Request</button>
+    </div>
+
+    <div class="card" id="repeatResult" style="display:none;">
+        <h2>Response</h2>
+        <div id="repeatStatus"></div>
+        <pre id="repeatResponseHeaders" style="margin-bottom:10px;"></pre>
+        <pre id="repeatResponseBody"></pre>
+    </div>
+</div>
+
+<!-- JWT Decoder Tab -->
+<div id="tab-jwt" class="tab-panel">
+    <div class="card">
+        <h2>JWT Decoder</h2>
+        <p style="font-size:12px;color:#475569;margin-bottom:12px;">Paste any JWT token to decode it. No verification is performed.</p>
+        <div class="jwt-input-area">
+            <textarea id="jwtInput" rows="4" placeholder="Paste JWT token here...">{% for f in req.findings %}{% if 'JWT' in f.type %}{% if 'eyJ' in f.detail %}{{ f.detail.split('eyJ')[1].split('"')[0] }}{% endif %}{% endif %}{% endfor %}</textarea>
+        </div>
+        <button class="btn btn-primary" onclick="decodeJWT()">🔐 Decode JWT</button>
+    </div>
+
+    <div id="jwtResult" style="display:none;">
+        <div class="jwt-part">
+            <div class="jwt-part-label label-header">Header</div>
+            <pre class="jwt-json" id="jwtHeader"></pre>
+        </div>
+        <div class="jwt-part">
+            <div class="jwt-part-label label-payload">Payload</div>
+            <pre class="jwt-json" id="jwtPayload"></pre>
+        </div>
+        <div class="jwt-part">
+            <div class="jwt-part-label label-sig">Signature</div>
+            <pre class="jwt-json" id="jwtSig" style="color:#a78bfa;word-break:break-all;"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ── Tab switching ─────────────────────────────────────────────────────────
+    function switchTab(name, btn) {
+        document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.getElementById("tab-" + name).classList.add("active");
+        btn.classList.add("active");
+    }
+
+    // ── Repeater ──────────────────────────────────────────────────────────────
+    async function sendRepeat() {
+        const url = document.getElementById("repeatUrl").value;
+        const headersRaw = document.getElementById("repeatHeaders").value;
+        const body = document.getElementById("repeatBody").value;
+
+        let headers = {};
+        try {
+            headers = JSON.parse(headersRaw);
+        } catch(e) {
+            alert("Headers must be valid JSON.");
+            return;
+        }
+
+        document.getElementById("repeatResult").style.display = "block";
+        document.getElementById("repeatResponseBody").textContent = "Sending...";
+        document.getElementById("repeatResponseHeaders").textContent = "";
+        document.getElementById("repeatStatus").textContent = "";
+
+        try {
+            const resp = await fetch("/repeat/{{ req.id }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url, headers, body })
+            });
+
+            const data = await resp.json();
+
+            if (data.error) {
+                document.getElementById("repeatResponseBody").textContent = "Error: " + data.error;
+                return;
+            }
+
+            const sc = data.status_code;
+            const color = sc >= 500 ? "#ef4444" : sc >= 400 ? "#f59e0b" : sc >= 300 ? "#60a5fa" : "#22c55e";
+            document.getElementById("repeatStatus").innerHTML = `<span class="status-pill" style="background:#1e293b;color:${color};">HTTP ${sc}</span>`;
+
+            let headersText = "";
+            for (const [k, v] of Object.entries(data.response_headers || {})) {
+                headersText += `${k}: ${v}\n`;
+            }
+            document.getElementById("repeatResponseHeaders").textContent = headersText;
+            document.getElementById("repeatResponseBody").textContent = data.response_body || "(empty)";
+
+        } catch(e) {
+            document.getElementById("repeatResponseBody").textContent = "Network error: " + e.message;
+        }
+    }
+
+    // ── JWT Decoder ───────────────────────────────────────────────────────────
+    async function decodeJWT() {
+        const token = document.getElementById("jwtInput").value.trim();
+        if (!token) { alert("Please paste a JWT token."); return; }
+
+        const resp = await fetch("/jwt-decode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token })
+        });
+
+        const data = await resp.json();
+        document.getElementById("jwtResult").style.display = "block";
+
+        if (data.error) {
+            document.getElementById("jwtHeader").textContent = data.error;
+            document.getElementById("jwtPayload").textContent = "";
+            document.getElementById("jwtSig").textContent = "";
+            return;
+        }
+
+        document.getElementById("jwtHeader").textContent  = JSON.stringify(data.header, null, 2);
+        document.getElementById("jwtPayload").textContent = JSON.stringify(data.payload, null, 2);
+        document.getElementById("jwtSig").textContent     = data.signature;
+    }
+</script>
+
+</body>
+</html>
