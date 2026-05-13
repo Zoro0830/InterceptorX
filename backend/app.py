@@ -1,204 +1,325 @@
-from flask import Flask, jsonify, render_template, request as flask_request
-import sqlite3
-import json
-import base64
-import requests as http_requests
+"""
+InterceptorX — Flask backend
+Modules:
+  db.py             — SQLite helpers
+  ssrf.py           — SSRF protection
+  repeater.py       — Session-aware HTTP request replayer
+  session_store.py  — Named persistent sessions (cookie jars)
+  scope.py          — Scope management (allowed/blocked domains)
+  jwt_utils.py      — JWT decoder
+  active_testing.py — Payload mutation + response analysis
+  report_export.py  — JSON / HTML report generation
+"""
+import sys, os
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from flask import Flask, jsonify, render_template, request as flask_request, Response
+import logging, secrets
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+import db
+import ssrf
+import repeater
+import session_store
+import scope
+import jwt_utils
+import active_testing
+import report_export
 
 app = Flask(__name__)
 
-DB_PATH = "database/traffic.db"
+# CSRF-style token for destructive endpoints
+_CLEAR_TOKEN = secrets.token_hex(16)
 
 
-# ─── DB Helper ───────────────────────────────────────────────────────────────
-
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def row_to_dict(row):
-    findings_raw = row["findings"]
-    try:
-        findings = json.loads(findings_raw) if findings_raw else []
-    except Exception:
-        findings = []
-
-    response_headers_raw = row["response_headers"]
-    try:
-        response_headers = json.loads(response_headers_raw) if response_headers_raw else {}
-    except Exception:
-        response_headers = {}
-
-    request_headers_raw = row["request_headers"]
-    try:
-        request_headers = json.loads(request_headers_raw) if request_headers_raw else {}
-    except Exception:
-        request_headers = {}
-
-    return {
-        "id": row["id"],
-        "method": row["method"],
-        "url": row["url"],
-        "status_code": row["status_code"],
-        "request_headers": request_headers,
-        "request_body": row["request_body"] or "",
-        "response_headers": response_headers,
-        "response_body": row["response_body"] or "",
-        "findings": findings,
-        "severity": row["severity"] if "severity" in row.keys() else "SAFE",
-        "timestamp": row["timestamp"]
-    }
-
-
-# ─── Routes ──────────────────────────────────────────────────────────────────
+# ─── Core Routes ─────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
     return "<meta http-equiv='refresh' content='0; url=/dashboard'>"
 
 
-@app.route("/traffic", methods=["GET"])
+@app.route("/traffic")
 def get_traffic():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM traffic_logs ORDER BY id DESC LIMIT 100")
-    rows = cursor.fetchall()
+    conn  = db.get_db()
+    rows  = conn.execute("SELECT * FROM traffic_logs ORDER BY id DESC LIMIT 100").fetchall()
     conn.close()
-    return jsonify([row_to_dict(r) for r in rows])
+    return jsonify([db.row_to_dict(r) for r in rows])
 
 
 @app.route("/dashboard")
 def dashboard():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM traffic_logs ORDER BY id DESC LIMIT 100")
-    rows = cursor.fetchall()
+    conn    = db.get_db()
+    rows    = conn.execute("SELECT * FROM traffic_logs ORDER BY id DESC LIMIT 100").fetchall()
     conn.close()
-
-    traffic_data = [row_to_dict(r) for r in rows]
-
-    # Stats
-    stats = {
-        "total": len(traffic_data),
-        "high": sum(1 for t in traffic_data if t["severity"] == "HIGH"),
-        "medium": sum(1 for t in traffic_data if t["severity"] == "MEDIUM"),
-        "safe": sum(1 for t in traffic_data if t["severity"] == "SAFE"),
+    traffic = [db.row_to_dict(r) for r in rows]
+    stats   = {
+        "total":  len(traffic),
+        "high":   sum(1 for t in traffic if t["severity"] == "HIGH"),
+        "medium": sum(1 for t in traffic if t["severity"] == "MEDIUM"),
+        "safe":   sum(1 for t in traffic if t["severity"] == "SAFE"),
     }
-
-    return render_template("dashboard.html", traffic=traffic_data, stats=stats)
+    scope_state = scope.get_state()
+    return render_template("dashboard.html", traffic=traffic, stats=stats,
+                           scope=scope_state)
 
 
 @app.route("/request/<int:request_id>")
 def request_detail(request_id):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM traffic_logs WHERE id = ?", (request_id,))
-    row = cursor.fetchone()
+    conn = db.get_db()
+    row  = conn.execute("SELECT * FROM traffic_logs WHERE id = ?", (request_id,)).fetchone()
     conn.close()
-
     if not row:
         return "Request not found", 404
+    req       = db.row_to_dict(row)
+    in_scope, scope_reason = scope.is_in_scope(req["url"])
+    return render_template("request_detail.html", req=req,
+                           in_scope=in_scope, scope_reason=scope_reason,
+                           sessions=session_store.list_sessions())
 
-    return render_template("request_detail.html", req=row_to_dict(row))
+
+# ─── Scope Management ────────────────────────────────────────────────────────
+
+@app.route("/scope", methods=["GET"])
+def get_scope():
+    return jsonify(scope.get_state())
+
+
+@app.route("/scope/enable", methods=["POST"])
+def set_scope_enabled():
+    data = flask_request.get_json(silent=True) or {}
+    scope.set_enabled(bool(data.get("enabled", False)))
+    return jsonify(scope.get_state())
+
+
+@app.route("/scope/allowed", methods=["POST"])
+def add_scope_allowed():
+    data    = flask_request.get_json(silent=True) or {}
+    pattern = data.get("pattern", "").strip()
+    if not pattern:
+        return jsonify({"error": "pattern required"}), 400
+    scope.add_allowed(pattern)
+    return jsonify(scope.get_state())
+
+
+@app.route("/scope/allowed", methods=["DELETE"])
+def remove_scope_allowed():
+    data    = flask_request.get_json(silent=True) or {}
+    pattern = data.get("pattern", "").strip()
+    scope.remove_allowed(pattern)
+    return jsonify(scope.get_state())
+
+
+@app.route("/scope/blocked", methods=["POST"])
+def add_scope_blocked():
+    data    = flask_request.get_json(silent=True) or {}
+    pattern = data.get("pattern", "").strip()
+    if not pattern:
+        return jsonify({"error": "pattern required"}), 400
+    scope.add_blocked(pattern)
+    return jsonify(scope.get_state())
+
+
+@app.route("/scope/blocked", methods=["DELETE"])
+def remove_scope_blocked():
+    data    = flask_request.get_json(silent=True) or {}
+    pattern = data.get("pattern", "").strip()
+    scope.remove_blocked(pattern)
+    return jsonify(scope.get_state())
+
+
+@app.route("/scope/check", methods=["POST"])
+def check_scope():
+    data = flask_request.get_json(silent=True) or {}
+    url  = data.get("url", "")
+    allowed, reason = scope.is_in_scope(url)
+    return jsonify({"url": url, "in_scope": allowed, "reason": reason})
+
+
+# ─── Session Management ───────────────────────────────────────────────────────
+
+@app.route("/sessions", methods=["GET"])
+def list_sessions():
+    return jsonify(session_store.list_sessions())
+
+
+@app.route("/sessions/<name>", methods=["DELETE"])
+def delete_session(name):
+    deleted = session_store.delete(name)
+    return jsonify({"deleted": deleted, "name": name})
+
+
+@app.route("/sessions/<name>/reset", methods=["POST"])
+def reset_session(name):
+    session_store.reset(name)
+    return jsonify({"reset": True, "name": name})
+
+
+@app.route("/sessions/<name>/cookies", methods=["GET"])
+def get_session_cookies(name):
+    return jsonify(session_store.get_cookies(name))
+
+
+@app.route("/sessions/<name>/cookies", methods=["POST"])
+def inject_session_cookies(name):
+    data    = flask_request.get_json(silent=True) or {}
+    cookies = data.get("cookies", {})
+    if not isinstance(cookies, dict):
+        return jsonify({"error": "cookies must be a JSON object"}), 400
+    session_store.inject_cookies(name, cookies)
+    return jsonify({"injected": len(cookies), "name": name})
 
 
 # ─── Repeater ────────────────────────────────────────────────────────────────
 
 @app.route("/repeat/<int:request_id>", methods=["POST"])
 def repeat_request(request_id):
-    """Resend a captured request, optionally with modified headers/body."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM traffic_logs WHERE id = ?", (request_id,))
-    row = cursor.fetchone()
+    conn = db.get_db()
+    row  = conn.execute("SELECT * FROM traffic_logs WHERE id = ?", (request_id,)).fetchone()
     conn.close()
-
     if not row:
         return jsonify({"error": "Request not found"}), 404
 
-    data = flask_request.get_json(silent=True) or {}
-    method = row["method"]
-    url = data.get("url", row["url"])
+    data     = flask_request.get_json(silent=True) or {}
+    row_d    = db.row_to_dict(row)
 
-    # Use modified headers/body from request body if provided, else use original
+    # Raw HTTP mode — parse the raw editor content
+    raw_http = data.get("raw_http", "").strip()
+    if raw_http:
+        try:
+            result = repeater.send_raw(
+                raw_http         = raw_http,
+                base_url         = row_d["url"],
+                session_name     = data.get("session", "default"),
+                follow_redirects = data.get("follow_redirects", False),
+            )
+            return jsonify(result)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            logger.exception("Error in raw repeat")
+            return jsonify({"error": "Internal server error"}), 500
+
+    # Standard JSON mode
+    method   = row_d["method"]
+    url      = data.get("url",     row_d["url"])
+    headers  = data.get("headers", row_d["request_headers"])
+    body     = data.get("body",    row_d["request_body"])
+    session  = data.get("session", "default")
+    follow   = data.get("follow_redirects", False)
+
     try:
-        original_headers = json.loads(row["request_headers"] or "{}")
-    except Exception:
-        original_headers = {}
-
-    headers = data.get("headers", original_headers)
-    body = data.get("body", row["request_body"] or "")
-
-    # Remove proxy-related headers that would cause issues
-    for h in ["host", "content-length", "transfer-encoding"]:
-        headers.pop(h, None)
-        headers.pop(h.capitalize(), None)
-
-    try:
-        resp = http_requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            data=body,
-            timeout=15,
-            verify=False,
-            allow_redirects=False
-        )
-
-        return jsonify({
-            "status_code": resp.status_code,
-            "response_headers": dict(resp.headers),
-            "response_body": resp.text[:50000]  # Cap at 50KB
-        })
-
+        result = repeater.send(method, url, headers, body,
+                               session_name=session,
+                               follow_redirects=follow)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Unhandled error in repeat_request")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ─── JWT Decoder ─────────────────────────────────────────────────────────────
 
 @app.route("/jwt-decode", methods=["POST"])
 def jwt_decode():
-    """Decode a JWT token without verification."""
-    data = flask_request.get_json(silent=True) or {}
+    data  = flask_request.get_json(silent=True) or {}
     token = data.get("token", "").strip()
-
     if not token:
         return jsonify({"error": "No token provided"}), 400
-
     try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            return jsonify({"error": "Invalid JWT format"}), 400
-
-        def decode_part(part):
-            part += "=" * (4 - len(part) % 4)
-            return json.loads(base64.urlsafe_b64decode(part).decode("utf-8"))
-
-        header = decode_part(parts[0])
-        payload = decode_part(parts[1])
-
-        return jsonify({
-            "header": header,
-            "payload": payload,
-            "signature": parts[2],
-            "raw": token
-        })
-
+        return jsonify(jwt_utils.decode(token))
     except Exception as e:
-        return jsonify({"error": f"Failed to decode: {str(e)}"}), 400
+        return jsonify({"error": f"Failed to decode: {e}"}), 400
 
 
-# ─── Clear DB ────────────────────────────────────────────────────────────────
+# ─── Clear DB ─────────────────────────────────────────────────────────────────
+
+@app.route("/clear-token")
+def get_clear_token():
+    return jsonify({"token": _CLEAR_TOKEN})
+
 
 @app.route("/clear", methods=["POST"])
 def clear_traffic():
-    conn = get_db()
+    data  = flask_request.get_json(silent=True) or {}
+    token = data.get("token", "")
+    if not secrets.compare_digest(token, _CLEAR_TOKEN):
+        logger.warning("Clear attempt with invalid token")
+        return jsonify({"error": "Invalid confirmation token."}), 403
+    conn = db.get_db()
     conn.execute("DELETE FROM traffic_logs")
     conn.commit()
     conn.close()
+    logger.info("Traffic log cleared")
     return jsonify({"message": "Traffic log cleared."})
+
+
+# ─── Export Reports ───────────────────────────────────────────────────────────
+
+@app.route("/export/json")
+def export_json():
+    conn    = db.get_db()
+    rows    = conn.execute("SELECT * FROM traffic_logs ORDER BY id DESC").fetchall()
+    conn.close()
+    traffic = [db.row_to_dict(r) for r in rows]
+    return Response(report_export.to_json(traffic), mimetype="application/json",
+                    headers={"Content-Disposition": "attachment; filename=interceptorx_report.json"})
+
+
+@app.route("/export/html")
+def export_html():
+    conn    = db.get_db()
+    rows    = conn.execute("SELECT * FROM traffic_logs ORDER BY id DESC").fetchall()
+    conn.close()
+    traffic = [db.row_to_dict(r) for r in rows]
+    return Response(report_export.to_html(traffic), mimetype="text/html",
+                    headers={"Content-Disposition": "attachment; filename=interceptorx_report.html"})
+
+
+# ─── Active Tester ────────────────────────────────────────────────────────────
+
+@app.route("/active-test/<int:request_id>", methods=["POST"])
+def active_test(request_id):
+    conn = db.get_db()
+    row  = conn.execute("SELECT * FROM traffic_logs WHERE id = ?", (request_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Request not found"}), 404
+
+    row_d           = db.row_to_dict(row)
+    data            = flask_request.get_json(silent=True) or {}
+    vuln_type       = data.get("type", "sqli").lower()
+    custom_payloads = data.get("payloads", [])
+
+    # Scope check before active testing
+    in_scope, reason = scope.is_in_scope(row_d["url"])
+    if not in_scope:
+        return jsonify({"error": f"Out of scope: {reason}"}), 403
+
+    try:
+        results = active_testing.run(
+            vuln_type       = vuln_type,
+            method          = row_d["method"],
+            original_url    = row_d["url"],
+            original_body   = row_d["request_body"],
+            headers         = row_d["request_headers"],
+            custom_payloads = custom_payloads,
+        )
+        return jsonify({"type": vuln_type, "results": results})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Unhandled error in active_test")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 if __name__ == "__main__":

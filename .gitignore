@@ -1,4 +1,13 @@
+.venv/
 __pycache__/
 *.pyc
-venv/
+*.log
+
+backend/database/*.db
+backend/database/*.sqlite
+backend/database/*.sqlite3
+backend/database/*-wal
+backend/database/*-shm
+
 .env
+.vscode/

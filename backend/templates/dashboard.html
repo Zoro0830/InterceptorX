@@ -215,6 +215,8 @@
     <div class="logo">Interceptor<span>X</span></div>
     <div style="display:flex;gap:10px;align-items:center;">
         <span style="font-size:12px;color:#475569;">Auto-refresh: <span id="countdown">30</span>s</span>
+        <a href="/export/json" style="padding:8px 14px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#38bdf8;font-size:12px;font-family:'Courier New',monospace;text-decoration:none;">⬇ JSON</a>
+        <a href="/export/html" style="padding:8px 14px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#a78bfa;font-size:12px;font-family:'Courier New',monospace;text-decoration:none;">⬇ HTML Report</a>
         <button class="btn btn-danger" onclick="clearTraffic()">Clear Log</button>
     </div>
 </div>
@@ -236,6 +238,39 @@
     <div class="stat-card safe">
         <div class="stat-number">{{ stats.safe }}</div>
         <div class="stat-label">Clean Requests</div>
+    </div>
+</div>
+
+<!-- Scope Manager -->
+<div id="scope" style="background:#1e293b;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h2 style="font-size:14px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:0;">🎯 Scope Manager</h2>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#e2e8f0;cursor:pointer;">
+            <input type="checkbox" id="scopeEnabled" onchange="toggleScope(this.checked)"> Enforce scope
+        </label>
+    </div>
+    <p style="font-size:11px;color:#475569;margin-bottom:14px;">
+        Active testing only runs against in-scope targets. Supports wildcards: <code style="color:#38bdf8;">*.example.com</code>
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+            <div style="font-size:12px;color:#22c55e;margin-bottom:8px;">✅ Allowed domains</div>
+            <div id="allowedList" style="min-height:40px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;">
+                <input type="text" id="newAllowed" placeholder="*.example.com"
+                  style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:12px;outline:none;">
+                <button onclick="addAllowed()" style="padding:7px 12px;background:#052e16;color:#22c55e;border:1px solid #22c55e;border-radius:6px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;">+ Add</button>
+            </div>
+        </div>
+        <div>
+            <div style="font-size:12px;color:#ef4444;margin-bottom:8px;">⛔ Blocked domains</div>
+            <div id="blockedList" style="min-height:40px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;">
+                <input type="text" id="newBlocked" placeholder="ads.example.com"
+                  style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:12px;outline:none;">
+                <button onclick="addBlocked()" style="padding:7px 12px;background:#450a0a;color:#ef4444;border:1px solid #ef4444;border-radius:6px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;">+ Block</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -350,11 +385,97 @@
         });
     }
 
-    function clearTraffic() {
-        if (!confirm("Clear all traffic logs?")) return;
-        fetch("/clear", { method: "POST" })
-            .then(() => location.reload());
+    async function clearTraffic() {
+        if (!confirm("Clear all traffic logs? This cannot be undone.")) return;
+        try {
+            const tokenResp = await fetch("/clear-token");
+            const { token } = await tokenResp.json();
+            const resp = await fetch("/clear", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token })
+            });
+            const result = await resp.json();
+            if (resp.ok) { location.reload(); }
+            else { alert("Clear failed: " + (result.error || "Unknown error")); }
+        } catch(e) { alert("Clear failed: " + e.message); }
     }
+
+    // ── Scope Manager ─────────────────────────────────────────────────────────
+    async function loadScope() {
+        const r = await fetch("/scope");
+        const s = await r.json();
+        document.getElementById("scopeEnabled").checked = s.enabled;
+
+        const al = document.getElementById("allowedList");
+        al.innerHTML = s.allowed.length === 0
+            ? '<span style="color:#475569;font-size:11px;">No patterns — all allowed</span>'
+            : s.allowed.map(p => `
+                <span style="display:inline-flex;align-items:center;gap:4px;background:#052e16;color:#22c55e;border-radius:4px;padding:2px 8px;font-size:11px;margin:2px;">
+                    ${p} <button onclick="removeAllowed('${p}')" style="background:none;border:none;color:#475569;cursor:pointer;font-size:12px;padding:0;margin:0;">×</button>
+                </span>`).join("");
+
+        const bl = document.getElementById("blockedList");
+        bl.innerHTML = s.blocked.length === 0
+            ? '<span style="color:#475569;font-size:11px;">No custom blocks</span>'
+            : s.blocked.map(p => `
+                <span style="display:inline-flex;align-items:center;gap:4px;background:#450a0a;color:#ef4444;border-radius:4px;padding:2px 8px;font-size:11px;margin:2px;">
+                    ${p} <button onclick="removeBlocked('${p}')" style="background:none;border:none;color:#475569;cursor:pointer;font-size:12px;padding:0;margin:0;">×</button>
+                </span>`).join("");
+    }
+
+    async function toggleScope(enabled) {
+        await fetch("/scope/enable", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled })
+        });
+        loadScope();
+    }
+
+    async function addAllowed() {
+        const p = document.getElementById("newAllowed").value.trim();
+        if (!p) return;
+        await fetch("/scope/allowed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pattern: p })
+        });
+        document.getElementById("newAllowed").value = "";
+        loadScope();
+    }
+
+    async function removeAllowed(p) {
+        await fetch("/scope/allowed", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pattern: p })
+        });
+        loadScope();
+    }
+
+    async function addBlocked() {
+        const p = document.getElementById("newBlocked").value.trim();
+        if (!p) return;
+        await fetch("/scope/blocked", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pattern: p })
+        });
+        document.getElementById("newBlocked").value = "";
+        loadScope();
+    }
+
+    async function removeBlocked(p) {
+        await fetch("/scope/blocked", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pattern: p })
+        });
+        loadScope();
+    }
+
+    loadScope();
 
     // Auto-refresh countdown
     let countdown = 30;

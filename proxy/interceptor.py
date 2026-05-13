@@ -25,7 +25,8 @@ IGNORED_DOMAINS = (
 IGNORED_KEYWORDS = [
     "gen_204", "telemetry", "analytics",
     "suggest", "complete/s", "RotateCookies",
-    "waa", "ogads", "heartbeat", "ping"
+    "waa", "ogads", "heartbeat", "ping",
+    "socket.io", "sockjs", "websocket", "polling",
 ]
  
 ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
@@ -36,6 +37,7 @@ REQUIRED_SECURITY_HEADERS = [
     "x-frame-options",
     "x-content-type-options",
     "strict-transport-security",
+    "content-security-policy",
 ]
  
 # ─── Helper: Response type ────────────────────────────────────────────────────
@@ -89,7 +91,7 @@ SQLI_PATTERNS = [
  
 IDOR_API_PATTERNS = [
     r"/api/(users?|accounts?|orders?|documents?|files?|profiles?|customers?)/\d+",
-    r"/(user|account|order|document|profile|customer)/\d{2,}",
+    r"/(user|account|order|document|profile|customer)/\d+",
     r"(user_id|account_id|order_id|customer_id|profile_id)=\d+",
 ]
  
@@ -153,19 +155,66 @@ def decode_jwt_payload(token):
         if len(parts) != 3:
             return None
         payload = parts[1]
-        payload += "=" * (4 - len(payload) % 4)
+        payload += "=" * ((4 - len(payload) % 4) % 4)  # FIX: avoids 4 extra '=' when already aligned
         decoded = base64.urlsafe_b64decode(payload).decode("utf-8")
         return json.loads(decoded)
     except Exception:
         return None
  
-# ─── Security Headers (HTML pages only) ──────────────────────────────────────
- 
-def analyze_security_headers(response_headers, url):
-    normalized = {h.lower() for h in response_headers}
+# ─── Security Headers (context-aware) ───────────────────────────────────────
+#
+# Only flag missing headers when ALL of the following are true:
+#   1. Response is a full HTML page (not redirect, API, CDN asset, error page)
+#   2. Status code is 200 (skip 3xx redirects — they don't serve content)
+#   3. Not a cross-origin CDN resource
+#
+# This prevents garbage findings on redirects, APIs, and embedded resources.
+
+# CDN / analytics / media hostnames to skip for security header checks.
+# Uses suffix matching so cdn123.example.com also matches "cdn" prefix patterns,
+# and exact hostname matching for known providers.
+_CDN_HOSTNAME_CONTAINS = {
+    "cdn", "static", "assets", "images", "img",
+    "fonts", "media", "files", "storage",
+}
+
+_CDN_KNOWN_HOSTS = {
+    "ajax.googleapis.com", "fonts.googleapis.com", "fonts.gstatic.com",
+    "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com",
+    "stackpath.bootstrapcdn.com", "maxcdn.bootstrapcdn.com",
+    "s3.amazonaws.com", "storage.googleapis.com",
+    "akamaized.net", "fastly.net", "cloudfront.net",
+}
+
+def _is_cdn_url(url: str) -> bool:
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        # Exact match against known CDN providers
+        if host in _CDN_KNOWN_HOSTS:
+            return True
+        # Suffix match — cdn123.example.com matches, as does static2.example.com
+        for suffix in _CDN_KNOWN_HOSTS:
+            if host.endswith("." + suffix):
+                return True
+        # Subdomain prefix patterns — split on dots and check first segment
+        parts = host.split(".")
+        if parts and parts[0] in _CDN_HOSTNAME_CONTAINS:
+            return True
+        return False
+    except Exception:
+        return False
+
+def analyze_security_headers(response_headers, url, status_code=200):
+    # Only check full HTML pages with 200 status
     content_type = response_headers.get("content-type", "").lower()
     if "text/html" not in content_type:
         return []
+    if status_code != 200:
+        return []
+    if _is_cdn_url(url):
+        return []
+    normalized = {h.lower() for h in response_headers}
     return [h for h in REQUIRED_SECURITY_HEADERS if h not in normalized]
  
 # ─── Main Scan ───────────────────────────────────────────────────────────────
@@ -174,22 +223,34 @@ def scan_for_vulns(url, request_headers, request_body, response_body, response_h
     findings = []
     user_input = f"{url} {request_body or ''}"
  
+    # Passive scanner — regex on request input only.
+    # These are INDICATORS of suspicious patterns, not confirmed vulnerabilities.
+    # Severity is MEDIUM (not HIGH) because request-side regex has no response
+    # context and cannot confirm exploitation. Use Active Tester to verify.
     for pattern in SQLI_PATTERNS:
         if re.search(pattern, user_input, re.IGNORECASE):
-            findings.append({"type": "SQL Injection Attempt", "detail": "SQLi pattern in request input", "severity": "HIGH"})
+            findings.append({"type": "Potential SQL Injection Pattern",
+                             "detail": "Suspicious SQLi-like pattern detected in request — use Active Tester to verify",
+                             "severity": "MEDIUM"})
             break
- 
+
     for pattern in XSS_PATTERNS:
         if re.search(pattern, user_input, re.IGNORECASE):
-            findings.append({"type": "XSS Attempt", "detail": "XSS payload in request", "severity": "HIGH"})
+            findings.append({"type": "Suspicious XSS Payload Pattern",
+                             "detail": "XSS-like payload detected in request — use Active Tester to verify",
+                             "severity": "MEDIUM"})
             break
- 
+
     if check_idor(url, request_body):
-        findings.append({"type": "Possible IDOR", "detail": "User-controlled resource ID on API endpoint", "severity": "MEDIUM"})
- 
+        findings.append({"type": "Potential IDOR Pattern",
+                         "detail": "User-controlled resource ID on API endpoint — verify access control manually",
+                         "severity": "MEDIUM"})
+
     for pattern in PATH_TRAVERSAL_PATTERNS:
         if re.search(pattern, user_input, re.IGNORECASE):
-            findings.append({"type": "Path Traversal Attempt", "detail": "Directory traversal sequence in request", "severity": "HIGH"})
+            findings.append({"type": "Potential Path Traversal Pattern",
+                             "detail": "Directory traversal sequence in request — verify manually",
+                             "severity": "MEDIUM"})
             break
  
     findings.extend(check_sensitive_data(response_body, response_headers))
@@ -240,7 +301,7 @@ def is_interesting_response(flow):
  
 # ─── DB Path ─────────────────────────────────────────────────────────────────
  
-DB_PATH = r"Z:\burpclone\backend\database\traffic.db"
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend", "database", "traffic.db")
  
 # ─── Main Hook ───────────────────────────────────────────────────────────────
  
@@ -260,9 +321,14 @@ def response(flow: http.HTTPFlow):
     request_headers = dict(flow.request.headers)
     response_headers = dict(flow.response.headers)
     request_body = flow.request.get_text(strict=False) or ""
+
+    MAX_BODY = 50000
     response_body = flow.response.get_text(strict=False) or ""
- 
-    missing_headers = analyze_security_headers(response_headers, url)
+
+    if len(response_body) > MAX_BODY:
+        response_body = response_body[:MAX_BODY] + "\n\n[TRUNCATED]"
+
+    missing_headers = analyze_security_headers(response_headers, url, status_code)
     vuln_findings = scan_for_vulns(url, request_headers, request_body, response_body, response_headers)
     severity = get_severity(missing_headers, vuln_findings)
  

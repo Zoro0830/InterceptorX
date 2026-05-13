@@ -265,13 +265,28 @@
     <span>URL</span>{{ req.url }}
 </div>
 
+<!-- Scope Indicator -->
+<div style="margin-bottom:16px;padding:8px 14px;border-radius:6px;font-size:12px;
+     background:{{ '#052e16' if in_scope else '#450a0a' }};
+     color:{{ '#22c55e' if in_scope else '#ef4444' }};
+     border-left:3px solid {{ '#22c55e' if in_scope else '#ef4444' }};">
+  {{ '✅ In Scope' if in_scope else '⛔ Out of Scope' }} — {{ scope_reason }}
+  {% if not in_scope %}
+    <a href="/dashboard#scope" style="color:#f59e0b;margin-left:12px;font-size:11px;">
+      Add to scope →
+    </a>
+  {% endif %}
+</div>
+
 <!-- Tabs -->
 <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('findings', this)">🔍 Findings ({{ req.findings|length }})</button>
     <button class="tab-btn" onclick="switchTab('request', this)">📤 Request</button>
     <button class="tab-btn" onclick="switchTab('response', this)">📥 Response</button>
     <button class="tab-btn" onclick="switchTab('repeater', this)">🔁 Repeater</button>
+    <button id="rawEditorBtn" class="tab-btn" onclick="switchTab('raweditor', this)">✏️ Raw Editor</button>
     <button class="tab-btn" onclick="switchTab('jwt', this)">🔐 JWT Decoder</button>
+    <button class="tab-btn" onclick="switchTab('activetester', this)">⚡ Active Tester</button>
 </div>
 
 <!-- Findings Tab -->
@@ -318,7 +333,38 @@
 <div id="tab-repeater" class="tab-panel">
     <div class="card">
         <h2>Request Repeater</h2>
-        <p style="font-size:12px;color:#475569;margin-bottom:12px;">Modify and resend this request. Edit the URL, headers, or body below.</p>
+        <p style="font-size:12px;color:#475569;margin-bottom:14px;">
+          Session-aware repeater — cookies persist automatically across requests.
+        </p>
+
+        <!-- Session + options row -->
+        <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;">
+            <div>
+                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">Session</label>
+                <select id="repeatSession" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:12px;">
+                    <option value="default">default</option>
+                    {% for s in sessions %}
+                    <option value="{{ s.name }}" {% if s.name == 'default' %}selected{% endif %}>
+                        {{ s.name }} ({{ s.cookie_count }} cookies)
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">New session name</label>
+                <input type="text" id="newSessionName" placeholder="e.g. admin-user"
+                  style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:12px;width:160px;">
+                <button onclick="addSession()" style="margin-left:6px;padding:8px 12px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#38bdf8;font-size:12px;cursor:pointer;font-family:'Courier New',monospace;">+ Add</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;cursor:pointer;">
+                <input type="checkbox" id="followRedirects"> Follow redirects
+            </label>
+        </div>
+
+        <!-- Session cookie display -->
+        <div id="sessionCookieBar" style="background:#0f172a;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:#475569;">
+            Loading session cookies...
+        </div>
 
         <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">URL</label>
         <input type="text" class="url-input" id="repeatUrl" value="{{ req.url }}">
@@ -334,15 +380,92 @@
             </div>
         </div>
 
-        <br>
-        <button class="btn btn-primary" onclick="sendRepeat()">▶ Send Request</button>
+        <div style="display:flex;gap:10px;margin-top:14px;align-items:center;">
+            <button class="btn btn-primary" onclick="sendRepeat()">▶ Send Request</button>
+            <button onclick="resetSession()" style="padding:10px 16px;background:#450a0a;color:#fca5a5;border:none;border-radius:8px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;">🗑 Clear Session</button>
+            <span id="csrfNotice" style="font-size:11px;color:#f59e0b;display:none;"></span>
+        </div>
     </div>
 
     <div class="card" id="repeatResult" style="display:none;">
-        <h2>Response</h2>
-        <div id="repeatStatus"></div>
-        <pre id="repeatResponseHeaders" style="margin-bottom:10px;"></pre>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <h2 style="margin:0;">Response</h2>
+            <button onclick="showDiff()" id="diffBtn" style="display:none;padding:6px 12px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#38bdf8;font-size:11px;cursor:pointer;font-family:'Courier New',monospace;">
+                ⚡ Diff with original
+            </button>
+        </div>
+        <div id="repeatStatus" style="margin-bottom:8px;"></div>
+        <div id="repeatRedirects" style="font-size:11px;color:#475569;margin-bottom:8px;"></div>
+        <details style="margin-bottom:10px;">
+            <summary style="font-size:12px;color:#94a3b8;cursor:pointer;">Response Headers</summary>
+            <pre id="repeatResponseHeaders" style="margin-top:8px;"></pre>
+        </details>
         <pre id="repeatResponseBody"></pre>
+    </div>
+
+    <!-- Diff viewer -->
+    <div class="card" id="diffPanel" style="display:none;">
+        <h2>Diff — Original vs Repeated Response</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Original response</div>
+                <pre id="diffOriginal" style="max-height:400px;overflow-y:auto;"></pre>
+            </div>
+            <div>
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Repeated response</div>
+                <pre id="diffRepeated" style="max-height:400px;overflow-y:auto;"></pre>
+            </div>
+        </div>
+        <div id="diffSummary" style="margin-top:12px;font-size:12px;color:#94a3b8;"></div>
+    </div>
+</div>
+
+<!-- Raw HTTP Editor Tab -->
+<div id="tab-raweditor" class="tab-panel">
+    <div class="card">
+        <h2>Raw HTTP Editor</h2>
+        <p style="font-size:12px;color:#475569;margin-bottom:14px;">
+            Edit the raw HTTP request directly — exactly as it will be sent.
+            The Host header determines the target.
+        </p>
+
+        <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;">
+            <div>
+                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">Session</label>
+                <select id="rawSession" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:12px;">
+                    <option value="default">default</option>
+                    {% for s in sessions %}
+                    <option value="{{ s.name }}">{{ s.name }} ({{ s.cookie_count }} cookies)</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;cursor:pointer;">
+                <input type="checkbox" id="rawFollowRedirects"> Follow redirects
+            </label>
+            <button onclick="formatRawRequest()" style="padding:8px 12px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#38bdf8;font-size:12px;cursor:pointer;font-family:'Courier New',monospace;">
+                Auto-format
+            </button>
+        </div>
+
+        <textarea id="rawHttpEditor" rows="24" spellcheck="false" style="font-size:12px;line-height:1.6;"></textarea>
+
+        <div style="display:flex;gap:10px;margin-top:14px;">
+            <button class="btn btn-primary" onclick="sendRaw()">▶ Send Raw Request</button>
+            <button onclick="loadCurrentRequest()" style="padding:10px 16px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#94a3b8;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;">
+                ↩ Load current request
+            </button>
+        </div>
+    </div>
+
+    <div class="card" id="rawResult" style="display:none;">
+        <h2>Response</h2>
+        <div id="rawStatus" style="margin-bottom:8px;"></div>
+        <div id="rawCsrfNotice" style="font-size:11px;color:#f59e0b;margin-bottom:8px;display:none;"></div>
+        <details style="margin-bottom:10px;">
+            <summary style="font-size:12px;color:#94a3b8;cursor:pointer;">Response Headers</summary>
+            <pre id="rawResponseHeaders" style="margin-top:8px;"></pre>
+        </details>
+        <pre id="rawResponseBody"></pre>
     </div>
 </div>
 
@@ -382,54 +505,210 @@
         btn.classList.add("active");
     }
 
-    // ── Repeater ──────────────────────────────────────────────────────────────
-    async function sendRepeat() {
-        const url = document.getElementById("repeatUrl").value;
-        const headersRaw = document.getElementById("repeatHeaders").value;
-        const body = document.getElementById("repeatBody").value;
+    // ── Session helpers ───────────────────────────────────────────────────────
+    let _lastRepeatedBody = null;
+    const _originalBody = {{ req.response_body | tojson }};
 
-        let headers = {};
+    async function refreshSessionCookies() {
+        const name = document.getElementById("repeatSession").value;
         try {
-            headers = JSON.parse(headersRaw);
+            const r = await fetch(`/sessions/${name}/cookies`);
+            const cookies = await r.json();
+            const bar = document.getElementById("sessionCookieBar");
+            const keys = Object.keys(cookies);
+            if (keys.length === 0) {
+                bar.textContent = `Session "${name}": no cookies yet`;
+            } else {
+                bar.innerHTML = `<span style="color:#38bdf8;">Session "${name}":</span> ` +
+                    keys.map(k => `<span style="color:#86efac;">${k}</span>=<span style="color:#94a3b8;">${cookies[k].substring(0,30)}${cookies[k].length>30?"…":""}</span>`).join(" | ");
+            }
         } catch(e) {
-            alert("Headers must be valid JSON.");
+            document.getElementById("sessionCookieBar").textContent = "Could not load cookies";
+        }
+    }
+
+    function addSession() {
+        const name = document.getElementById("newSessionName").value.trim();
+        if (!name) return;
+        const sel = document.getElementById("repeatSession");
+        if (![...sel.options].find(o => o.value === name)) {
+            sel.add(new Option(name, name));
+        }
+        sel.value = name;
+        document.getElementById("newSessionName").value = "";
+        refreshSessionCookies();
+    }
+
+    async function resetSession() {
+        const name = document.getElementById("repeatSession").value;
+        if (!confirm(`Clear all cookies for session "${name}"?`)) return;
+        await fetch(`/sessions/${name}/reset`, { method: "POST" });
+        refreshSessionCookies();
+    }
+
+    document.getElementById("repeatSession").addEventListener("change", refreshSessionCookies);
+    refreshSessionCookies();
+
+    // ── Repeater ──────────────────────────────────────────────────────────────
+    function _renderResponse(statusEl, headersEl, bodyEl, statusBarEl, data, redirectsEl) {
+        if (data.error) {
+            bodyEl.textContent = "Error: " + data.error;
             return;
         }
+        const sc = data.status_code;
+        const color = sc >= 500 ? "#ef4444" : sc >= 400 ? "#f59e0b" : sc >= 300 ? "#60a5fa" : "#22c55e";
+        statusEl.innerHTML = `<span class="status-pill" style="background:#1e293b;color:${color};">HTTP ${sc}</span>`;
+
+        let ht = "";
+        for (const [k, v] of Object.entries(data.response_headers || {})) ht += `${k}: ${v}\n`;
+        headersEl.textContent = ht;
+        bodyEl.textContent = data.response_body || "(empty)";
+
+        // Redirect history
+        if (redirectsEl && data.redirect_history && data.redirect_history.length > 0) {
+            redirectsEl.textContent = "Redirects: " + data.redirect_history.map(r => `${r.status} → ${r.url}`).join(" | ");
+        }
+
+        // CSRF token notice
+        if (data.csrf_token) {
+            document.getElementById("csrfNotice").style.display = "block";
+            document.getElementById("csrfNotice").textContent = `🔑 CSRF token extracted: ${data.csrf_token.substring(0,20)}…`;
+        }
+    }
+
+    async function sendRepeat() {
+        const url         = document.getElementById("repeatUrl").value;
+        const headersRaw  = document.getElementById("repeatHeaders").value;
+        const body        = document.getElementById("repeatBody").value;
+        const session     = document.getElementById("repeatSession").value;
+        const followRedir = document.getElementById("followRedirects").checked;
+
+        let headers = {};
+        try { headers = JSON.parse(headersRaw); }
+        catch(e) { alert("Headers must be valid JSON."); return; }
 
         document.getElementById("repeatResult").style.display = "block";
-        document.getElementById("repeatResponseBody").textContent = "Sending...";
+        document.getElementById("diffPanel").style.display = "none";
+        document.getElementById("repeatResponseBody").textContent = "Sending…";
         document.getElementById("repeatResponseHeaders").textContent = "";
         document.getElementById("repeatStatus").textContent = "";
+        document.getElementById("csrfNotice").style.display = "none";
 
         try {
             const resp = await fetch("/repeat/{{ req.id }}", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, headers, body })
+                body: JSON.stringify({ url, headers, body, session, follow_redirects: followRedir })
             });
-
             const data = await resp.json();
-
-            if (data.error) {
-                document.getElementById("repeatResponseBody").textContent = "Error: " + data.error;
-                return;
-            }
-
-            const sc = data.status_code;
-            const color = sc >= 500 ? "#ef4444" : sc >= 400 ? "#f59e0b" : sc >= 300 ? "#60a5fa" : "#22c55e";
-            document.getElementById("repeatStatus").innerHTML = `<span class="status-pill" style="background:#1e293b;color:${color};">HTTP ${sc}</span>`;
-
-            let headersText = "";
-            for (const [k, v] of Object.entries(data.response_headers || {})) {
-                headersText += `${k}: ${v}\n`;
-            }
-            document.getElementById("repeatResponseHeaders").textContent = headersText;
-            document.getElementById("repeatResponseBody").textContent = data.response_body || "(empty)";
-
+            _lastRepeatedBody = data.response_body || "";
+            document.getElementById("diffBtn").style.display = "inline-block";
+            _renderResponse(
+                document.getElementById("repeatStatus"),
+                document.getElementById("repeatResponseHeaders"),
+                document.getElementById("repeatResponseBody"),
+                null, data,
+                document.getElementById("repeatRedirects")
+            );
+            refreshSessionCookies();
         } catch(e) {
             document.getElementById("repeatResponseBody").textContent = "Network error: " + e.message;
         }
     }
+
+    // ── Diff viewer ───────────────────────────────────────────────────────────
+    function showDiff() {
+        if (!_lastRepeatedBody) return;
+        document.getElementById("diffPanel").style.display = "block";
+        document.getElementById("diffOriginal").textContent = _originalBody || "(empty)";
+        document.getElementById("diffRepeated").textContent = _lastRepeatedBody;
+
+        const origLen = (_originalBody || "").length;
+        const repLen  = _lastRepeatedBody.length;
+        const diff    = repLen - origLen;
+        const sign    = diff > 0 ? "+" : "";
+        document.getElementById("diffSummary").textContent =
+            `Original: ${origLen} bytes | Repeated: ${repLen} bytes | Δ ${sign}${diff} bytes`;
+    }
+
+    // ── Raw HTTP Editor ───────────────────────────────────────────────────────
+    function loadCurrentRequest() {
+        const url     = "{{ req.url }}";
+        const method  = "{{ req.method }}";
+        const headers = {{ req.request_headers | tojson }};
+        const body    = {{ req.request_body | tojson }};
+
+        const parsed   = new URL(url);
+        const path     = parsed.pathname + parsed.search;
+        let raw = `${method} ${path} HTTP/1.1\r\n`;
+        raw += `Host: ${parsed.host}\r\n`;
+
+        for (const [k, v] of Object.entries(headers)) {
+            if (k.toLowerCase() === "host") continue;
+            raw += `${k}: ${v}\r\n`;
+        }
+        raw += `\r\n${body || ""}`;
+        document.getElementById("rawHttpEditor").value = raw;
+    }
+
+    function formatRawRequest() {
+        const raw = document.getElementById("rawHttpEditor").value;
+        // Normalize line endings
+        document.getElementById("rawHttpEditor").value = raw.replace(/\r\n|\r/g, "\n");
+    }
+
+    async function sendRaw() {
+        const raw_http    = document.getElementById("rawHttpEditor").value.trim();
+        const session     = document.getElementById("rawSession").value;
+        const followRedir = document.getElementById("rawFollowRedirects").checked;
+
+        if (!raw_http) { alert("Paste a raw HTTP request first."); return; }
+
+        document.getElementById("rawResult").style.display = "block";
+        document.getElementById("rawResponseBody").textContent = "Sending…";
+        document.getElementById("rawResponseHeaders").textContent = "";
+        document.getElementById("rawStatus").textContent = "";
+        document.getElementById("rawCsrfNotice").style.display = "none";
+
+        try {
+            const resp = await fetch("/repeat/{{ req.id }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ raw_http, session, follow_redirects: followRedir })
+            });
+            const data = await resp.json();
+            _renderResponse(
+                document.getElementById("rawStatus"),
+                document.getElementById("rawResponseHeaders"),
+                document.getElementById("rawResponseBody"),
+                null, data,
+                null
+            );
+            if (data.csrf_token) {
+                document.getElementById("rawCsrfNotice").style.display = "block";
+                document.getElementById("rawCsrfNotice").textContent =
+                    `🔑 CSRF token extracted: ${data.csrf_token.substring(0,40)}…`;
+            }
+            refreshSessionCookies();
+        } catch(e) {
+            document.getElementById("rawResponseBody").textContent = "Network error: " + e.message;
+        }
+    }
+
+    // Pre-load current request into raw editor on tab open
+   document.addEventListener("DOMContentLoaded", function () {
+    const rawBtn = document.getElementById("rawEditorBtn");
+
+    if (rawBtn) {
+        rawBtn.addEventListener("click", function () {
+            const editor = document.getElementById("rawHttpEditor");
+
+            if (editor && !editor.value.trim()) {
+                loadCurrentRequest();
+            }
+        });
+    }
+});
 
     // ── JWT Decoder ───────────────────────────────────────────────────────────
     async function decodeJWT() {
@@ -456,6 +735,183 @@
         document.getElementById("jwtPayload").textContent = JSON.stringify(data.payload, null, 2);
         document.getElementById("jwtSig").textContent     = data.signature;
     }
+</script>
+
+<!-- Active Tester Tab -->
+<div id="tab-activetester" class="tab-panel">
+    <div class="card">
+        <h2>⚡ Active Testing Panel</h2>
+        <p style="font-size:12px;color:#475569;margin-bottom:16px;">
+            Inject payloads into request parameters and analyze responses for suspicious behavior.<br>
+            <span style="color:#f59e0b;">⚠️ Only use against targets you own or have explicit written permission to test.</span>
+        </p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;">
+            <div>
+                <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;">Vulnerability Type</label>
+                <select id="vulnType" onchange="loadDefaultPayloads()" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:13px;outline:none;">
+                    <option value="sqli">SQL Injection</option>
+                    <option value="xss">XSS (Reflected)</option>
+                    <option value="idor">IDOR (ID Enumeration)</option>
+                </select>
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+                <button class="btn btn-primary" onclick="runActiveTest()" style="width:100%;background:#7c3aed;color:#ede9fe;">
+                    ▶ Run Test
+                </button>
+            </div>
+        </div>
+
+        <div id="idorNote" style="display:none;background:#1e293b;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#94a3b8;">
+            ℹ️ IDOR mode will auto-increment numeric IDs found in the URL path and compare responses (tests IDs: original+1 through original+5).
+        </div>
+
+        <div id="payloadSection">
+            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;">
+                Payloads <span style="color:#475569;">(one per line — edit freely or add custom)</span>
+            </label>
+            <textarea id="payloadBox" rows="8" placeholder="Loading default payloads..."></textarea>
+        </div>
+    </div>
+
+    <div id="activeTestResults" style="display:none;">
+        <div class="card">
+            <h2>Test Results</h2>
+            <div id="activeTestSummary" style="margin-bottom:14px;font-size:13px;"></div>
+            <div id="activeTestTable"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .result-row {
+        background: #0f172a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 8px;
+        border-left: 3px solid #334155;
+        font-size: 12px;
+    }
+    .result-row.flag-red  { border-color: #ef4444; }
+    .result-row.flag-safe { border-color: #22c55e; }
+    .result-row.flag-info { border-color: #60a5fa; }
+    .result-payload { color: #f472b6; font-weight: bold; margin-bottom:4px; word-break:break-all; }
+    .result-flag    { margin: 6px 0; font-size: 13px; }
+    .result-meta    { color: #475569; font-size: 11px; }
+    .result-snippet { color:#94a3b8; margin-top:6px; white-space:pre-wrap; word-break:break-all; max-height:80px; overflow-y:auto; }
+</style>
+
+<script>
+    const DEFAULT_PAYLOADS = {
+        sqli: [
+            "'",
+            '"',
+            "' OR '1'='1",
+            "' OR 1=1--",
+            '" OR "1"="1',
+            "admin'--",
+            "' UNION SELECT NULL--",
+            "1; DROP TABLE users--"
+        ],
+        xss: [
+            "<script>alert(1)<\/script>",
+            "<img src=x onerror=alert(1)>",
+            "<svg onload=alert(1)>",
+            "javascript:alert(1)",
+            "'><script>alert(document.cookie)<\/script>",
+            "<body onload=alert(1)>"
+        ],
+        idor: []
+    };
+
+    function loadDefaultPayloads() {
+        const type = document.getElementById("vulnType").value;
+        const box = document.getElementById("payloadBox");
+        const idorNote = document.getElementById("idorNote");
+        const payloadSection = document.getElementById("payloadSection");
+
+        if (type === "idor") {
+            idorNote.style.display = "block";
+            payloadSection.style.display = "none";
+        } else {
+            idorNote.style.display = "none";
+            payloadSection.style.display = "block";
+            box.value = DEFAULT_PAYLOADS[type].join("\n");
+        }
+    }
+
+    async function runActiveTest() {
+        const type = document.getElementById("vulnType").value;
+        const box = document.getElementById("payloadBox");
+
+        let payloads = [];
+        if (type !== "idor") {
+            payloads = box.value.split("\n").map(p => p.trim()).filter(Boolean);
+            if (payloads.length === 0) {
+                alert("Add at least one payload.");
+                return;
+            }
+        }
+
+        document.getElementById("activeTestResults").style.display = "block";
+        document.getElementById("activeTestSummary").textContent = "⏳ Running tests...";
+        document.getElementById("activeTestTable").innerHTML = "";
+
+        try {
+            const resp = await fetch("/active-test/{{ req.id }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type, payloads })
+            });
+
+            const data = await resp.json();
+            if (data.error) {
+                document.getElementById("activeTestSummary").innerHTML = `<span style="color:#ef4444;">Error: ${escapeHtml(data.error)}</span>`;
+                return;
+            }
+
+            const results = data.results || [];
+            const flaggedCount = results.filter(r => r.flag && r.flag.startsWith("🔴")).length;
+            document.getElementById("activeTestSummary").innerHTML =
+                `Tested <b>${results.length}</b> request(s) — ` +
+                `<span style="color:${flaggedCount > 0 ? '#ef4444' : '#22c55e'};">` +
+                `${flaggedCount} potential finding(s)</span>` +
+                `<br><span style="font-size:11px;color:#475569;">Results are indicators only — manual verification required before claiming a confirmed vulnerability.</span>`;
+
+            const table = document.getElementById("activeTestTable");
+            results.forEach(r => {
+                const isRed  = r.flag && r.flag.startsWith("🔴");
+                const isSafe = r.flag && r.flag.startsWith("✅");
+                const cls = isRed ? "flag-red" : isSafe ? "flag-safe" : "flag-info";
+
+                const payloadLabel = type === "idor" ? r.payload : r.payload;
+                const urlInfo = r.url ? `<span class="result-meta">URL: ${escapeHtml(r.url)}</span>` : "";
+                const bodyInfo = r.body ? `<span class="result-meta">Body: ${escapeHtml(r.body)}</span>` : "";
+                const statusInfo = r.status_code ? `<span class="result-meta"> | Status: ${escapeHtml(r.status_code)} | Len: ${escapeHtml(r.response_length)}</span>` : "";
+                const snippet = r.response_snippet ? `<div class="result-snippet">${escapeHtml(r.response_snippet)}</div>` : "";
+                const errInfo = r.error ? `<span style="color:#ef4444;">${escapeHtml(r.error)}</span>` : "";
+                const flagText = r.flag ? escapeHtml(r.flag) : errInfo;
+
+                table.innerHTML += `
+                    <div class="result-row ${cls}">
+                        <div class="result-payload">Payload: ${escapeHtml(payloadLabel)}</div>
+                        <div class="result-flag">${flagText}</div>
+                        <div>${urlInfo}${bodyInfo}${statusInfo}</div>
+                        ${snippet}
+                    </div>`;
+            });
+
+        } catch(e) {
+            document.getElementById("activeTestSummary").innerHTML = `<span style="color:#ef4444;">Network error: ${escapeHtml(e.message)}</span>`;
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    // Load defaults on page load
+    loadDefaultPayloads();
 </script>
 
 </body>
