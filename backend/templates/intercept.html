@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Intercept — InterceptorX</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Courier New', monospace; padding: 24px; }
+
+  /* ─── Navbar ─── */
+  .nav-tab { padding: 0 16px; height: 48px; display: inline-flex; align-items: center; font-size: 12px; font-family: 'Courier New', monospace; color: #475569; text-decoration: none; border-bottom: 2px solid transparent; transition: color 0.15s; white-space: nowrap; }
+  .nav-tab:hover { color: #94a3b8; text-decoration: none; }
+  .nav-active { color: #ef4444 !important; border-bottom-color: #ef4444 !important; }
+
+  /* ─── Toggle ─── */
+  .toggle-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    border: 1px solid #334155;
+  }
+
+  .toggle-switch {
+    position: relative;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #334155;
+    border-radius: 28px;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+
+  .toggle-slider:before {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    left: 4px; top: 4px;
+    background: #94a3b8;
+    border-radius: 50%;
+    transition: 0.3s;
+  }
+
+  input:checked + .toggle-slider { background: #ef4444; }
+  input:checked + .toggle-slider:before { transform: translateX(24px); background: #fff; }
+
+  .toggle-label { font-size: 14px; font-weight: bold; }
+  .toggle-label.on  { color: #ef4444; }
+  .toggle-label.off { color: #475569; }
+
+  .toggle-hint { font-size: 12px; color: #475569; }
+
+  /* ─── Queue ─── */
+  .queue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .queue-title { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+
+  .queue-count {
+    background: #ef4444;
+    color: #fff;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 20px;
+    text-align: center;
+  }
+
+  .queue-count.empty { background: #334155; color: #475569; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #334155;
+    border: 1px dashed #1e293b;
+    border-radius: 10px;
+  }
+
+  .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+
+  /* ─── Flow card ─── */
+  .flow-card {
+    background: #1e293b;
+    border-radius: 10px;
+    border: 1px solid #334155;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .flow-card.selected { border-color: #38bdf8; }
+
+  .flow-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+  }
+
+  .flow-header:hover { background: #263548; }
+
+  .method-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .method-GET    { background: #064e3b; color: #6ee7b7; }
+  .method-POST   { background: #1e3a5f; color: #93c5fd; }
+  .method-PUT    { background: #451a03; color: #fcd34d; }
+  .method-DELETE { background: #450a0a; color: #fca5a5; }
+  .method-PATCH  { background: #3b0764; color: #d8b4fe; }
+
+  .flow-url {
+    flex: 1;
+    font-size: 12px;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .flow-time { font-size: 11px; color: #475569; flex-shrink: 0; }
+
+  .flow-actions {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 12px;
+  }
+
+  .btn {
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    transition: opacity 0.15s;
+  }
+
+  .btn:hover { opacity: 0.85; }
+  .btn-forward { background: #052e16; color: #22c55e; border: 1px solid #22c55e; }
+  .btn-drop    { background: #450a0a; color: #ef4444; border: 1px solid #ef4444; }
+  .btn-edit    { background: #1e3a5f; color: #93c5fd; border: 1px solid #93c5fd; }
+
+  /* ─── Editor panel ─── */
+  .editor-panel {
+    display: none;
+    padding: 0 16px 16px;
+    border-top: 1px solid #334155;
+  }
+
+  .editor-panel.open { display: block; }
+
+  .editor-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .editor-label {
+    font-size: 11px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    margin-top: 12px;
+  }
+
+  input.editor-input, textarea.editor-textarea {
+    width: 100%;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #e2e8f0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    outline: none;
+  }
+
+  input.editor-input:focus, textarea.editor-textarea:focus { border-color: #38bdf8; }
+  textarea.editor-textarea { resize: vertical; }
+
+  .btn-send-edited {
+    background: #7c3aed;
+    color: #ede9fe;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    margin-top: 10px;
+  }
+
+  .btn-send-edited:hover { background: #6d28d9; }
+</style>
+</head>
+<body>
+
+<!-- ─── Global Navbar ─── -->
+<nav style="display:flex;align-items:center;background:#0a1628;border-bottom:1px solid #1e293b;padding:0 24px;height:48px;position:sticky;top:0;z-index:1000;margin:-24px -24px 24px -24px;">
+  <div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#38bdf8;margin-right:32px;white-space:nowrap;">Interceptor<span style="color:#f472b6;">X</span></div>
+  <div style="display:flex;gap:2px;flex:1;">
+    <a href="/dashboard" class="nav-tab">⬛ Proxy</a>
+    <a href="/intercept" class="nav-tab nav-active">⏸ Intercept</a>
+    <a href="/analytics" class="nav-tab">📊 Analytics</a>
+  </div>
+  <div id="nav-status" style="font-size:11px;color:#475569;margin-right:12px;"></div>
+  <span style="font-size:10px;color:#1e293b;">v0.2.0</span>
+</nav>
+
+<!-- ─── Toggle Bar ─── -->
+<div class="toggle-bar">
+  <label class="toggle-switch">
+    <input type="checkbox" id="interceptToggle" onchange="toggleIntercept(this.checked)">
+    <span class="toggle-slider"></span>
+  </label>
+  <div>
+    <div class="toggle-label off" id="toggleLabel">Intercept OFF</div>
+    <div class="toggle-hint" id="toggleHint">Enable to pause and inspect requests before they are forwarded</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;">
+    <button onclick="forwardAll()" style="padding:6px 14px;background:#052e16;color:#22c55e;border:1px solid #22c55e;border-radius:6px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;">▶▶ Forward All</button>
+    <button onclick="dropAll()"    style="padding:6px 14px;background:#450a0a;color:#ef4444;border:1px solid #ef4444;border-radius:6px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;">✖✖ Drop All</button>
+  </div>
+</div>
+
+<!-- ─── Queue ─── -->
+<div class="queue-header">
+  <span class="queue-title">Intercepted Requests</span>
+  <span class="queue-count empty" id="queueCount">0</span>
+</div>
+
+<div id="queueContainer">
+  <div class="empty-state" id="emptyState">
+    <div class="icon">⏸</div>
+    <p>Intercept is <span id="emptyStateMsg">disabled</span>.<br>
+    Toggle it ON above, then browse a website.<br>
+    Requests will appear here for inspection.</p>
+  </div>
+</div>
+
+<script>
+let _enabled = false;
+let _queue   = {};
+
+async function loadStatus() {
+  try {
+    const r = await fetch('/intercept/status');
+    const d = await r.json();
+    _enabled = d.enabled;
+    updateToggleUI(_enabled);
+
+    const newQueue = {};
+    for (const flow of d.queue) {
+      newQueue[flow.id] = flow;
+    }
+
+    // Add new flows
+    for (const id in newQueue) {
+      if (!_queue[id]) addFlowCard(newQueue[id]);
+    }
+
+    // Remove resolved flows
+    for (const id in _queue) {
+      if (!newQueue[id]) {
+        const el = document.getElementById('flow-' + id);
+        if (el) el.remove();
+      }
+    }
+
+    _queue = newQueue;
+    updateQueueCount();
+  } catch(e) {
+    console.error('Status fetch failed:', e);
+  }
+}
+
+function updateToggleUI(enabled) {
+  const toggle = document.getElementById('interceptToggle');
+  const label  = document.getElementById('toggleLabel');
+  const hint   = document.getElementById('toggleHint');
+  const navStatus = document.getElementById('nav-status');
+  const emptyMsg  = document.getElementById('emptyStateMsg');
+
+  toggle.checked = enabled;
+
+  if (enabled) {
+    label.textContent = 'Intercept ON';
+    label.className   = 'toggle-label on';
+    hint.textContent  = 'Requests are being paused — forward, drop, or edit below';
+    navStatus.innerHTML = '<span style="color:#ef4444;">● INTERCEPTING</span>';
+    if (emptyMsg) emptyMsg.textContent = 'enabled — waiting for requests';
+  } else {
+    label.textContent = 'Intercept OFF';
+    label.className   = 'toggle-label off';
+    hint.textContent  = 'Enable to pause and inspect requests before they are forwarded';
+    navStatus.innerHTML = '';
+    if (emptyMsg) emptyMsg.textContent = 'disabled';
+  }
+}
+
+function updateQueueCount() {
+  const count = Object.keys(_queue).length;
+  const el = document.getElementById('queueCount');
+  el.textContent = count;
+  el.className   = count > 0 ? 'queue-count' : 'queue-count empty';
+
+  const empty = document.getElementById('emptyState');
+  if (count > 0) {
+    if (empty) empty.style.display = 'none';
+  } else {
+    if (empty) empty.style.display = 'block';
+  }
+}
+
+async function toggleIntercept(enabled) {
+  await fetch('/intercept/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled })
+  });
+  _enabled = enabled;
+  updateToggleUI(enabled);
+
+  if (!enabled) {
+    // Clear all cards
+    _queue = {};
+    document.getElementById('queueContainer').innerHTML = `
+      <div class="empty-state" id="emptyState">
+        <div class="icon">⏸</div>
+        <p>Intercept is <span id="emptyStateMsg">disabled</span>.<br>
+        Toggle it ON above, then browse a website.<br>
+        Requests will appear here for inspection.</p>
+      </div>`;
+    updateQueueCount();
+  }
+}
+
+function addFlowCard(flow) {
+  const container = document.getElementById('queueContainer');
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.style.display = 'none';
+
+  const methodClass = 'method-' + flow.method;
+  const headersStr  = JSON.stringify(flow.headers || {}, null, 2);
+
+  const card = document.createElement('div');
+  card.className = 'flow-card';
+  card.id = 'flow-' + flow.id;
+  card.innerHTML = `
+    <div class="flow-header" onclick="toggleEditor('${flow.id}')">
+      <span class="method-badge ${methodClass}">${escHtml(flow.method)}</span>
+      <span class="flow-url" title="${escHtml(flow.url)}">${escHtml(flow.url)}</span>
+      <span class="flow-time">${escHtml(flow.timestamp || '')}</span>
+    </div>
+    <div class="flow-actions">
+      <button class="btn btn-forward" onclick="forwardFlow('${flow.id}')">▶ Forward</button>
+      <button class="btn btn-drop"    onclick="dropFlow('${flow.id}')">✖ Drop</button>
+      <button class="btn btn-edit"    onclick="toggleEditor('${flow.id}')">✏ Edit</button>
+    </div>
+    <div class="editor-panel" id="editor-${flow.id}">
+      <div class="editor-label">Method</div>
+      <input class="editor-input" id="edit-method-${flow.id}" value="${escHtml(flow.method)}" style="width:120px;">
+      <div class="editor-label">URL</div>
+      <input class="editor-input" id="edit-url-${flow.id}" value="${escHtml(flow.url)}">
+      <div class="editor-label">Headers (JSON)</div>
+      <textarea class="editor-textarea" id="edit-headers-${flow.id}" rows="6">${escHtml(headersStr)}</textarea>
+      <div class="editor-label">Body</div>
+      <textarea class="editor-textarea" id="edit-body-${flow.id}" rows="4">${escHtml(flow.body || '')}</textarea>
+      <button class="btn-send-edited" onclick="editAndForward('${flow.id}')">✏ Edit &amp; Forward</button>
+    </div>
+  `;
+  container.appendChild(card);
+}
+
+function toggleEditor(flowId) {
+  const panel = document.getElementById('editor-' + flowId);
+  const card  = document.getElementById('flow-' + flowId);
+  if (!panel) return;
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+  card.classList.toggle('selected', !isOpen);
+}
+
+async function forwardFlow(flowId) {
+  await fetch('/intercept/forward/' + flowId, { method: 'POST' });
+  removeCard(flowId);
+}
+
+async function dropFlow(flowId) {
+  await fetch('/intercept/drop/' + flowId, { method: 'POST' });
+  removeCard(flowId);
+}
+
+async function editAndForward(flowId) {
+  let headers = {};
+  try {
+    headers = JSON.parse(document.getElementById('edit-headers-' + flowId).value);
+  } catch(e) {
+    alert('Headers must be valid JSON.');
+    return;
+  }
+  await fetch('/intercept/edit/' + flowId, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      method:  document.getElementById('edit-method-' + flowId).value,
+      url:     document.getElementById('edit-url-'    + flowId).value,
+      headers: headers,
+      body:    document.getElementById('edit-body-'   + flowId).value,
+    })
+  });
+  removeCard(flowId);
+}
+
+async function forwardAll() {
+  for (const id in _queue) await forwardFlow(id);
+}
+
+async function dropAll() {
+  if (!confirm('Drop all intercepted requests?')) return;
+  for (const id in _queue) await dropFlow(id);
+}
+
+function removeCard(flowId) {
+  delete _queue[flowId];
+  const el = document.getElementById('flow-' + flowId);
+  if (el) el.remove();
+  updateQueueCount();
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Poll every second
+loadStatus();
+setInterval(loadStatus, 1000);
+</script>
+</body>
+</html>

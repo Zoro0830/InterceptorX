@@ -22,7 +22,7 @@ import session_store
 
 logger = logging.getLogger(__name__)
 
-LAB_MODE = False  # Set False for production targets (enables TLS verification)
+from config import LAB_MODE  # Set False for production targets (enables TLS verification)
 
 _HOP_BY_HOP = {
     "host", "content-length", "transfer-encoding",

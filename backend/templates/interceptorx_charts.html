@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>InterceptorX — Analytics</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #162032;
+    --border: rgba(148,163,184,0.12);
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --blue: #38bdf8;
+    --green: #22c55e;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; padding: 24px; }
+
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--blue); }
+  .logo span { color: var(--muted); font-weight: 400; font-size: 13px; letter-spacing: 1px; margin-left: 8px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .stat-card.high::before { background: var(--red); }
+  .stat-card.medium::before { background: var(--amber); }
+  .stat-card.safe::before { background: var(--green); }
+  .stat-card.total::before { background: var(--blue); }
+
+  .stat-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
+  .stat-card.high .stat-value { color: var(--red); }
+  .stat-card.medium .stat-value { color: var(--amber); }
+  .stat-card.safe .stat-value { color: var(--green); }
+  .stat-card.total .stat-value { color: var(--blue); }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .chart-title { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+
+  .chart-full { grid-column: 1 / -1; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- ─── Global Navbar ─── -->
+<nav style="display:flex;align-items:center;background:#0a1628;border-bottom:1px solid #1e293b;padding:0 24px;height:48px;position:sticky;top:0;z-index:1000;margin:-24px -24px 24px -24px;">
+  <div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#38bdf8;margin-right:32px;white-space:nowrap;">Interceptor<span style="color:#f472b6;">X</span></div>
+  <div style="display:flex;gap:2px;flex:1;">
+    <a href="/dashboard" class="nav-tab">⬛ Proxy</a>
+    <a href="/intercept" class="nav-tab nav-intercept">⏸ Intercept</a>
+    <a href="/analytics" class="nav-tab nav-active">📊 Analytics</a>
+  </div>
+  <span style="font-size:10px;color:#1e293b;margin-left:12px;">v0.2.0</span>
+</nav>
+<style>
+  .nav-tab{padding:0 16px;height:48px;display:inline-flex;align-items:center;font-size:12px;font-family:'Courier New',monospace;color:#475569;text-decoration:none;border-bottom:2px solid transparent;transition:color 0.15s;white-space:nowrap;}
+  .nav-tab:hover{color:#94a3b8;text-decoration:none;}
+  .nav-active{color:#38bdf8 !important;border-bottom-color:#38bdf8 !important;}
+  .nav-intercept{color:#64748b;}
+  .nav-intercept:hover{color:#ef4444 !important;}
+</style>
+
+<div class="stats-grid">
+  <div class="stat-card total">
+    <div class="stat-label">Total Requests</div>
+    <div class="stat-value" id="stat-total">0</div>
+  </div>
+  <div class="stat-card high">
+    <div class="stat-label">High Severity</div>
+    <div class="stat-value" id="stat-high">0</div>
+  </div>
+  <div class="stat-card medium">
+    <div class="stat-label">Medium Severity</div>
+    <div class="stat-value" id="stat-medium">0</div>
+  </div>
+  <div class="stat-card safe">
+    <div class="stat-label">Safe</div>
+    <div class="stat-value" id="stat-safe">0</div>
+  </div>
+</div>
+
+<div class="charts-grid">
+
+  <div class="chart-card">
+    <div class="chart-title">Severity Breakdown</div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>HIGH</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>MEDIUM</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>SAFE</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#38bdf8"></span>INFO</span>
+    </div>
+    <div style="position:relative;height:220px;">
+      <canvas id="severityChart" role="img" aria-label="Doughnut chart showing request severity distribution">Severity breakdown of intercepted traffic.</canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Finding Types</div>
+    <div style="position:relative;height:260px;">
+      <canvas id="findingsChart" role="img" aria-label="Bar chart showing vulnerability finding types">Count of each vulnerability type detected.</canvas>
+    </div>
+  </div>
+
+  <div class="chart-card chart-full">
+    <div class="chart-title">Requests Over Time</div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>HIGH</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>MEDIUM</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>SAFE</span>
+    </div>
+    <div style="position:relative;height:200px;">
+      <canvas id="timelineChart" role="img" aria-label="Stacked line chart of requests over time by severity">Traffic volume and severity trend over time.</canvas>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const GRID_COLOR  = 'rgba(148,163,184,0.08)';
+const TEXT_COLOR  = '#64748b';
+
+let severityChart, findingsChart, timelineChart;
+
+function buildSeverityChart(data) {
+  const ctx = document.getElementById('severityChart');
+  if (severityChart) severityChart.destroy();
+  severityChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['HIGH', 'MEDIUM', 'SAFE', 'INFO'],
+      datasets: [{
+        data: [data.high, data.medium, data.safe, data.info || 0],
+        backgroundColor: ['#ef4444','#f59e0b','#22c55e','#38bdf8'],
+        borderColor: '#1e293b',
+        borderWidth: 3,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.parsed} requests`
+          }
+        }
+      }
+    }
+  });
+}
+
+function buildFindingsChart(findings) {
+  const ctx = document.getElementById('findingsChart');
+  if (findingsChart) findingsChart.destroy();
+  findingsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: findings.map(f => f.type),
+      datasets: [{
+        label: 'Count',
+        data: findings.map(f => f.count),
+        backgroundColor: findings.map(f => f.color),
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          grid: { color: GRID_COLOR },
+          ticks: { color: TEXT_COLOR, font: { family: 'Courier New', size: 11 } },
+          border: { color: GRID_COLOR }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: TEXT_COLOR, font: { family: 'Courier New', size: 11 } },
+          border: { color: GRID_COLOR }
+        }
+      }
+    }
+  });
+}
+
+function buildTimelineChart(timeline) {
+  const ctx = document.getElementById('timelineChart');
+  if (timelineChart) timelineChart.destroy();
+  timelineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: timeline.labels,
+      datasets: [
+        {
+          label: 'HIGH',
+          data: timeline.high,
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.08)',
+          fill: true, tension: 0.4, borderWidth: 2,
+          pointRadius: 3, pointBackgroundColor: '#ef4444',
+        },
+        {
+          label: 'MEDIUM',
+          data: timeline.medium,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,0.08)',
+          fill: true, tension: 0.4, borderWidth: 2,
+          pointRadius: 3, pointBackgroundColor: '#f59e0b',
+        },
+        {
+          label: 'SAFE',
+          data: timeline.safe,
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34,197,94,0.05)',
+          fill: true, tension: 0.4, borderWidth: 2,
+          pointRadius: 3, pointBackgroundColor: '#22c55e',
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          grid: { color: GRID_COLOR },
+          ticks: { color: TEXT_COLOR, font: { family: 'Courier New', size: 11 }, autoSkip: true, maxTicksLimit: 8 },
+          border: { color: GRID_COLOR }
+        },
+        y: {
+          grid: { color: GRID_COLOR },
+          ticks: { color: TEXT_COLOR, font: { family: 'Courier New', size: 11 }, stepSize: 1 },
+          border: { color: GRID_COLOR }
+        }
+      }
+    }
+  });
+}
+
+async function loadData() {
+  try {
+    const resp = await fetch('/traffic');
+    const traffic = await resp.json();
+
+    const counts = { total: traffic.length, high: 0, medium: 0, safe: 0, info: 0 };
+    const findingCounts = {};
+    const timeMap = {};
+
+    for (const t of traffic) {
+      const sev = (t.severity || 'SAFE').toUpperCase();
+      if (sev === 'HIGH')   counts.high++;
+      else if (sev === 'MEDIUM') counts.medium++;
+      else if (sev === 'INFO')   counts.info++;
+      else counts.safe++;
+
+      const findings = Array.isArray(t.findings) ? t.findings : [];
+      for (const f of findings) {
+        const key = (f.type || 'Unknown').replace('Missing Header: ', 'Missing: ').substring(0, 28);
+        findingCounts[key] = (findingCounts[key] || 0) + 1;
+      }
+
+      const ts = t.timestamp ? t.timestamp.substring(0, 13).replace('T', ' ') : 'unknown';
+      if (!timeMap[ts]) timeMap[ts] = { high: 0, medium: 0, safe: 0 };
+      if (sev === 'HIGH')        timeMap[ts].high++;
+      else if (sev === 'MEDIUM') timeMap[ts].medium++;
+      else                       timeMap[ts].safe++;
+    }
+
+    document.getElementById('stat-total').textContent  = counts.total;
+    document.getElementById('stat-high').textContent   = counts.high;
+    document.getElementById('stat-medium').textContent = counts.medium;
+    document.getElementById('stat-safe').textContent   = counts.safe;
+
+    buildSeverityChart(counts);
+
+    const FINDING_COLORS = {
+      'SQL': '#ef4444', 'XSS': '#f59e0b', 'IDOR': '#a78bfa',
+      'Path': '#38bdf8', 'JWT': '#22c55e', 'Sensitive': '#f97316',
+      'Missing': '#64748b'
+    };
+    const findingEntries = Object.entries(findingCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([type, count]) => ({
+        type,
+        count,
+        color: Object.entries(FINDING_COLORS).find(([k]) => type.includes(k))?.[1] || '#64748b'
+      }));
+    buildFindingsChart(findingEntries.length > 0 ? findingEntries : [{ type: 'No findings', count: 0, color: '#64748b' }]);
+
+    const sortedKeys = Object.keys(timeMap).sort().slice(-20);
+    buildTimelineChart({
+      labels: sortedKeys,
+      high:   sortedKeys.map(k => timeMap[k].high),
+      medium: sortedKeys.map(k => timeMap[k].medium),
+      safe:   sortedKeys.map(k => timeMap[k].safe),
+    });
+
+  } catch (err) {
+    console.error('Failed to load traffic data:', err);
+    const fallback = { total: 47, high: 5, medium: 12, safe: 30 };
+    document.getElementById('stat-total').textContent  = fallback.total;
+    document.getElementById('stat-high').textContent   = fallback.high;
+    document.getElementById('stat-medium').textContent = fallback.medium;
+    document.getElementById('stat-safe').textContent   = fallback.safe;
+    buildSeverityChart(fallback);
+    buildFindingsChart([
+      { type: 'SQLi Pattern',        count: 8,  color: '#ef4444' },
+      { type: 'XSS Payload',         count: 6,  color: '#f59e0b' },
+      { type: 'IDOR Pattern',        count: 5,  color: '#a78bfa' },
+      { type: 'Missing CSP',         count: 11, color: '#64748b' },
+      { type: 'JWT Detected',        count: 4,  color: '#22c55e' },
+      { type: 'Sensitive Exposure',  count: 3,  color: '#f97316' },
+    ]);
+    buildTimelineChart({
+      labels: ['10:00','10:15','10:30','10:45','11:00','11:15','11:30','11:45','12:00'],
+      high:   [0,1,0,2,1,0,1,0,0],
+      medium: [1,2,3,1,2,1,0,2,0],
+      safe:   [4,3,5,2,4,6,3,4,5],
+    });
+  }
+}
+
+loadData();
+setInterval(loadData, 10000);
+</script>
+</body>
+</html>

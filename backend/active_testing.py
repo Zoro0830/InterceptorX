@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # TLS verification is disabled intentionally.
 # This tool operates as an intercepting proxy in a controlled lab environment.
 # Do NOT use against production targets without proper authorisation.
-LAB_MODE = False
+from config import LAB_MODE
 
 REQUEST_OPTIONS = {
     "timeout": 20,  # Increased — WAFs/slow servers need more headroom

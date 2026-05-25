@@ -321,6 +321,75 @@ def active_test(request_id):
         logger.exception("Unhandled error in active_test")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route("/analytics")
+def analytics():
+    return render_template("interceptorx_charts.html")
+
+
+# ─── Intercept Mode ───────────────────────────────────────────────────────────
+
+import intercept_store
+
+@app.route("/intercept")
+def intercept_page():
+    return render_template("intercept.html")
+
+
+@app.route("/intercept/status", methods=["GET"])
+def intercept_status():
+    return jsonify({
+        "enabled": intercept_store.is_enabled(),
+        "queue":   list(intercept_store.get_queue().values()),
+    })
+
+
+@app.route("/intercept/toggle", methods=["POST"])
+def intercept_toggle():
+    data    = flask_request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled", False))
+    intercept_store.set_enabled(enabled)
+    if not enabled:
+        intercept_store.clear_queue()
+    logger.info("Intercept mode: %s", "ON" if enabled else "OFF")
+    return jsonify({"enabled": enabled})
+
+
+@app.route("/intercept/forward/<flow_id>", methods=["POST"])
+def intercept_forward(flow_id):
+    ok = intercept_store.set_decision(flow_id, "forward")
+    if not ok:
+        return jsonify({"error": "Flow not found"}), 404
+    return jsonify({"status": "forwarded", "id": flow_id})
+
+
+@app.route("/intercept/drop/<flow_id>", methods=["POST"])
+def intercept_drop(flow_id):
+    ok = intercept_store.set_decision(flow_id, "drop")
+    if not ok:
+        return jsonify({"error": "Flow not found"}), 404
+    return jsonify({"status": "dropped", "id": flow_id})
+
+
+@app.route("/intercept/edit/<flow_id>", methods=["POST"])
+def intercept_edit(flow_id):
+    data = flask_request.get_json(silent=True) or {}
+    ok   = intercept_store.set_decision(
+        flow_id,
+        "edited",
+        edited_method  = data.get("method"),
+        edited_url     = data.get("url"),
+        edited_headers = data.get("headers"),
+        edited_body    = data.get("body"),
+    )
+    if not ok:
+        return jsonify({"error": "Flow not found"}), 404
+    return jsonify({"status": "edited_and_forwarded", "id": flow_id})
+
+
+@app.route("/intercept/clear", methods=["POST"])
+def intercept_clear():
+    intercept_store.clear_queue()
+    return jsonify({"status": "cleared"})
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)

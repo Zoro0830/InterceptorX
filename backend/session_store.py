@@ -16,6 +16,7 @@ import threading
 import requests
 import logging
 from urllib.parse import urlparse
+from config import LAB_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def get(name: str = "default") -> requests.Session:
     with _lock:
         if name not in _sessions:
             s = requests.Session()
-            s.verify = False   # Lab mode — disabled intentionally
+            s.verify = not LAB_MODE   # Lab mode — disabled intentionally
             _sessions[name] = s
             logger.info("Created new session: %s", name)
         return _sessions[name]

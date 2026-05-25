@@ -211,15 +211,29 @@
 </head>
 <body>
 
-<div class="header">
-    <div class="logo">Interceptor<span>X</span></div>
-    <div style="display:flex;gap:10px;align-items:center;">
-        <span style="font-size:12px;color:#475569;">Auto-refresh: <span id="countdown">30</span>s</span>
-        <a href="/export/json" style="padding:8px 14px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#38bdf8;font-size:12px;font-family:'Courier New',monospace;text-decoration:none;">⬇ JSON</a>
-        <a href="/export/html" style="padding:8px 14px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#a78bfa;font-size:12px;font-family:'Courier New',monospace;text-decoration:none;">⬇ HTML Report</a>
-        <button class="btn btn-danger" onclick="clearTraffic()">Clear Log</button>
-    </div>
-</div>
+<!-- ─── Global Navbar ─── -->
+<nav style="display:flex;align-items:center;background:#0a1628;border-bottom:1px solid #1e293b;padding:0 24px;height:48px;position:sticky;top:0;z-index:1000;margin:-24px -24px 24px -24px;">
+  <div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#38bdf8;margin-right:32px;white-space:nowrap;">Interceptor<span style="color:#f472b6;">X</span></div>
+  <div style="display:flex;gap:2px;flex:1;">
+    <a href="/dashboard" class="nav-tab nav-active">⬛ Proxy</a>
+    <a href="/intercept" class="nav-tab nav-intercept">⏸ Intercept</a>
+    <a href="/analytics" class="nav-tab">📊 Analytics</a>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span style="font-size:11px;color:#475569;">refresh: <span id="countdown">30</span>s</span>
+    <a href="/export/json" style="padding:5px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#38bdf8;font-size:11px;font-family:'Courier New',monospace;text-decoration:none;">⬇ JSON</a>
+    <a href="/export/html" style="padding:5px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#a78bfa;font-size:11px;font-family:'Courier New',monospace;text-decoration:none;">⬇ HTML</a>
+    <button class="btn btn-danger" onclick="clearTraffic()" style="padding:5px 10px;font-size:11px;">Clear Log</button>
+  </div>
+  <span style="font-size:10px;color:#1e293b;margin-left:12px;">v0.2.0</span>
+</nav>
+<style>
+  .nav-tab{padding:0 16px;height:48px;display:inline-flex;align-items:center;font-size:12px;font-family:'Courier New',monospace;color:#475569;text-decoration:none;border-bottom:2px solid transparent;transition:color 0.15s;white-space:nowrap;}
+  .nav-tab:hover{color:#94a3b8;text-decoration:none;}
+  .nav-active{color:#38bdf8 !important;border-bottom-color:#38bdf8 !important;}
+  .nav-intercept{color:#64748b;}
+  .nav-intercept:hover{color:#ef4444 !important;}
+</style>
 
 <!-- Stats -->
 <div class="stats">

@@ -4,7 +4,24 @@ import json
 import re
 import os
 import base64
- 
+import time
+import sys
+
+# Allow importing intercept_store from backend/
+_BACKEND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+
+try:
+    import intercept_store
+    _INTERCEPT_AVAILABLE = True
+except ImportError:
+    _INTERCEPT_AVAILABLE = False
+
+# In-memory flow registry — flow_id to mitmproxy flow object
+# intercept_store.json holds metadata + decisions for Flask to read/write
+_flow_registry: dict = {}
+
 # ─── Filters ────────────────────────────────────────────────────────────────
  
 IGNORED_EXTENSIONS = (
@@ -364,3 +381,99 @@ def response(flow: http.HTTPFlow):
     )
     conn.commit()
     conn.close()
+
+# ─── Intercept Hook ───────────────────────────────────────────────────────────
+#
+# Mode B: ALL matching requests are paused simultaneously.
+# Each flow runs its wait-loop in a separate daemon thread so mitmproxy
+# is free to accept and pause the next request immediately.
+# The main request() hook just registers the flow and spawns the thread.
+
+import threading as _threading
+
+def _wait_for_decision(flow: http.HTTPFlow, flow_id: str, url: str) -> None:
+    """Background thread — polls intercept_store until user decides."""
+    for _ in range(1200):          # 120s timeout
+        time.sleep(0.1)
+        entry = intercept_store.get_flow(flow_id)
+        if not entry:
+            break
+        decision = entry.get("decision")
+
+        if decision == "forward":
+            print(f"▶  FORWARDED  [{flow.request.method}] {url}")
+            intercept_store.remove_from_queue(flow_id)
+            _flow_registry.pop(flow_id, None)
+            flow.resume()
+            return
+
+        elif decision == "drop":
+            print(f"✖  DROPPED    [{flow.request.method}] {url}")
+            intercept_store.remove_from_queue(flow_id)
+            _flow_registry.pop(flow_id, None)
+            flow.kill()
+            return
+
+        elif decision == "edited":
+            edited = entry.get("edited_request", {})
+            if edited:
+                flow.request.method  = edited.get("method", flow.request.method)
+                flow.request.url     = edited.get("url",    flow.request.url)
+                flow.request.headers = edited.get("headers", flow.request.headers)
+                flow.request.set_text(edited.get("body", ""))
+            print(f"✏  EDITED+FWD [{flow.request.method}] {flow.request.pretty_url}")
+            intercept_store.remove_from_queue(flow_id)
+            _flow_registry.pop(flow_id, None)
+            flow.resume()
+            return
+
+    # Timeout — auto-forward
+    print(f"⏱  TIMEOUT AUTO-FORWARD [{flow.request.method}] {url}")
+    intercept_store.remove_from_queue(flow_id)
+    _flow_registry.pop(flow_id, None)
+    try:
+        flow.resume()
+    except Exception:
+        pass
+
+
+def request(flow: http.HTTPFlow):
+    """
+    Pause ALL matching requests simultaneously (Mode B).
+    Each paused flow gets its own background thread so the next
+    request can be intercepted immediately without waiting.
+    """
+    if not _INTERCEPT_AVAILABLE:
+        return
+    if not intercept_store.is_enabled():
+        return
+
+    url = flow.request.pretty_url
+    if should_ignore(url):
+        return
+    if flow.request.method not in ALLOWED_METHODS:
+        return
+
+    flow_id = str(id(flow))
+    _flow_registry[flow_id] = flow
+
+    intercept_store.add_to_queue(flow_id, {
+        "method":    flow.request.method,
+        "url":       url,
+        "headers":   dict(flow.request.headers),
+        "body":      flow.request.get_text(strict=False) or "",
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+    print(f"⏸  INTERCEPTED [{flow.request.method}] {url}")
+
+    # Pause the flow — mitmproxy won't forward until flow.resume() is called
+    flow.intercept()
+
+    # Spawn background thread to wait for user decision
+    t = _threading.Thread(
+        target=_wait_for_decision,
+        args=(flow, flow_id, url),
+        daemon=True,
+    )
+    t.start()
