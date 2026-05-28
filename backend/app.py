@@ -32,6 +32,8 @@ import scope
 import jwt_utils
 import active_testing
 import report_export
+import intruder
+import wordlist_store
 
 app = Flask(__name__)
 
@@ -325,6 +327,106 @@ def active_test(request_id):
 def analytics():
     return render_template("interceptorx_charts.html")
 
+
+
+# ─── Intruder ─────────────────────────────────────────────────────────────────
+
+@app.route("/intruder")
+def intruder_page():
+    req_id = flask_request.args.get("id")
+    req    = None
+    if req_id:
+        conn = db.get_db()
+        row  = conn.execute("SELECT * FROM traffic_logs WHERE id = ?", (req_id,)).fetchone()
+        conn.close()
+        if row:
+            req = db.row_to_dict(row)
+    return render_template("intruder.html", req=req)
+
+
+@app.route("/intruder/wordlists", methods=["GET"])
+def get_wordlists():
+    return jsonify(wordlist_store.list_all())
+
+
+@app.route("/intruder/wordlists/<wordlist_id>", methods=["GET"])
+def get_wordlist_payloads(wordlist_id):
+    payloads = wordlist_store.get_payloads(wordlist_id)
+    return jsonify({"id": wordlist_id, "payloads": payloads, "count": len(payloads)})
+
+
+@app.route("/intruder/wordlists/upload", methods=["POST"])
+def upload_wordlist():
+    data    = flask_request.get_json(silent=True) or {}
+    name    = data.get("name", "custom").strip()
+    content = data.get("content", "")
+    if not content.strip():
+        return jsonify({"error": "No content provided"}), 400
+    meta = wordlist_store.save_user_wordlist(name, content)
+    return jsonify(meta)
+
+
+@app.route("/intruder/wordlists/user/<name>", methods=["DELETE"])
+def delete_wordlist(name):
+    deleted = wordlist_store.delete_user_wordlist(name)
+    return jsonify({"deleted": deleted})
+
+
+@app.route("/intruder/run", methods=["POST"])
+def run_intruder():
+    data = flask_request.get_json(silent=True) or {}
+
+    method         = data.get("method", "GET").upper()
+    url_template   = data.get("url", "").strip()
+    headers_raw    = data.get("headers", {})
+    body_template  = data.get("body", "")
+    wordlist_name  = data.get("wordlist", "params")
+    custom_payloads = data.get("custom_payloads", [])
+
+    if not url_template:
+        return jsonify({"error": "URL is required"}), 400
+
+    # Build payload list
+    if custom_payloads:
+        payloads = [p.strip() for p in custom_payloads if p.strip()]
+    else:
+        payloads = wordlist_store.get_payloads(wordlist_name)
+        if not payloads:
+            payloads = wordlist_store.get_payloads("params")
+
+    if not payloads:
+        return jsonify({"error": "No payloads selected"}), 400
+
+    # Parse headers
+    if isinstance(headers_raw, str):
+        try:
+            headers_dict = __import__("json").loads(headers_raw)
+        except Exception:
+            headers_dict = {}
+    else:
+        headers_dict = headers_raw or {}
+
+    # Scope check
+    import re as _re
+    clean_url = _re.sub(r"§([^§]*)§", lambda m: m.group(1), url_template)
+    in_scope, reason = scope.is_in_scope(clean_url)
+    if not in_scope:
+        return jsonify({"error": f"Out of scope: {reason}"}), 403
+
+    try:
+        results = intruder.run_sniper(
+            method        = method,
+            url_template  = url_template,
+            headers_dict  = headers_dict,
+            body_template = body_template,
+            payloads      = payloads,
+        )
+        return jsonify(results)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Intruder error")
+        return jsonify({"error": "Internal server error"}), 500
 
 # ─── Intercept Mode ───────────────────────────────────────────────────────────
 

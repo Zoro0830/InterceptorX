@@ -246,6 +246,7 @@
     <a href="/dashboard" class="nav-tab nav-active">⬛ Proxy</a>
     <a href="/intercept" class="nav-tab nav-intercept">⏸ Intercept</a>
     <a href="/analytics" class="nav-tab">📊 Analytics</a>
+    <a href="/intruder" class="nav-tab">🎯 Intruder</a>
   </div>
   <span style="font-size:11px;color:#475569;">Request #{{ req.id }}</span>
   <span style="font-size:10px;color:#1e293b;margin-left:12px;">v0.2.0</span>
@@ -258,7 +259,10 @@
   .nav-intercept:hover{color:#ef4444 !important;}
 </style>
 
-<h1>Request #{{ req.id }}</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+  <h1 style="margin:0;">Request #{{ req.id }}</h1>
+  <a href="/intruder?id={{ req.id }}" style="padding:8px 16px;background:#3b0764;color:#a78bfa;border:1px solid #a78bfa;border-radius:6px;font-size:12px;font-family:'Courier New',monospace;text-decoration:none;font-weight:bold;">🎯 Send to Intruder</a>
+</div>
 
 <!-- Meta -->
 <div class="meta-row">

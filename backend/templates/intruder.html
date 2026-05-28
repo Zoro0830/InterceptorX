@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Intruder — InterceptorX</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0f172a; color: #e2e8f0; font-family: 'Courier New', monospace; padding: 24px; }
+body.diff-open { padding-bottom: calc(45vh + 24px); }
+.nav-tab { padding: 0 16px; height: 48px; display: inline-flex; align-items: center; font-size: 12px; font-family: 'Courier New', monospace; color: #475569; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+.nav-tab:hover { color: #94a3b8; text-decoration: none; }
+.nav-active { color: #a78bfa !important; border-bottom-color: #a78bfa !important; }
+.card { background: #1e293b; border-radius: 10px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+.card-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 6px; margin-top: 12px; }
+label:first-child { margin-top: 0; }
+input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 9px 12px; color: #e2e8f0; font-family: 'Courier New', monospace; font-size: 12px; outline: none; }
+input:focus, select:focus, textarea:focus { border-color: #38bdf8; }
+textarea { resize: vertical; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: end; }
+.btn { padding: 9px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; font-weight: bold; }
+.btn-run { background: #7c3aed; color: #ede9fe; }
+.btn-run:hover { background: #6d28d9; }
+.btn-clear { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+.marker-hint { background: #0f172a; border-radius: 6px; padding: 10px 14px; font-size: 11px; color: #475569; margin-bottom: 14px; border-left: 3px solid #a78bfa; }
+.marker-hint code { color: #a78bfa; }
+.progress-bar { height: 4px; background: #1e293b; border-radius: 2px; margin-bottom: 14px; overflow: hidden; }
+.progress-fill { height: 100%; background: #a78bfa; border-radius: 2px; transition: width 0.3s; width: 0%; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: #0f172a; padding: 10px 12px; text-align: left; font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: 1px; position: sticky; top: 48px; }
+td { padding: 9px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; cursor: pointer; }
+tr:hover td { background: #263548; }
+tr.selected td { background: #1a2d4a !important; border-left: 2px solid #38bdf8; }
+tr.diff-status td { background: rgba(239,68,68,0.06); }
+tr.diff-length td { background: rgba(245,158,11,0.06); }
+tr.diff-time td { background: rgba(56,189,248,0.06); }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.s2xx { background: #052e16; color: #22c55e; }
+.s3xx { background: #0c1a3b; color: #60a5fa; }
+.s4xx { background: #451a03; color: #f59e0b; }
+.s5xx { background: #450a0a; color: #ef4444; }
+.s-err { background: #1e293b; color: #475569; }
+.diff-flag { font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+.flag-status { background: #450a0a; color: #ef4444; }
+.flag-length { background: #451a03; color: #f59e0b; }
+.flag-time { background: #0c1a3b; color: #60a5fa; }
+.payload-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f472b6; }
+.body-snippet { font-size: 11px; color: #475569; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.baseline-row td { background: #0f172a !important; color: #475569; font-style: italic; }
+.sev-CRITICAL { background: #4a0050; color: #e879f9; border: 1px solid #a21caf; }
+.sev-HIGH     { background: #450a0a; color: #ef4444; border: 1px solid #991b1b; }
+.sev-MEDIUM   { background: #451a03; color: #f59e0b; border: 1px solid #92400e; }
+.sev-INFO     { background: #0c1a3b; color: #60a5fa; border: 1px solid #1e40af; }
+.sev-SAFE     { background: #052e16; color: #22c55e; border: 1px solid #166534; }
+.finding-item { font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-bottom: 2px; display: inline-block; }
+.finding-CRITICAL { background: #4a0050; color: #e879f9; }
+.finding-HIGH     { background: #450a0a; color: #ef4444; }
+.finding-MEDIUM   { background: #451a03; color: #f59e0b; }
+tr.sev-critical-row td { background: rgba(168,21,207,0.08) !important; }
+tr.sev-high-row td     { background: rgba(239,68,68,0.08) !important; }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-btn { padding: 5px 12px; border-radius: 5px; border: 1px solid #334155; background: #1e293b; color: #94a3b8; cursor: pointer; font-size: 11px; font-family: 'Courier New', monospace; }
+.filter-btn.active { border-color: #a78bfa; color: #a78bfa; }
+.stat-pill { background: #0f172a; border-radius: 6px; padding: 6px 12px; font-size: 12px; }
+
+/* Diff viewer — bottom drawer */
+.diff-panel { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 45vh; background: #0a1628; border-top: 2px solid #334155; z-index: 500; overflow: hidden; flex-direction: column; box-shadow: 0 -4px 24px rgba(0,0,0,0.5); }
+.diff-panel.open { display: flex; }
+.diff-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: #1e293b; border-bottom: 1px solid #334155; flex-shrink: 0; }
+.diff-title { font-size: 12px; color: #94a3b8; font-weight: bold; }
+.diff-body { flex: 1; overflow-y: auto; padding: 12px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.diff-col { font-size: 11px; }
+.diff-col-title { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.diff-content { background: #1e293b; border-radius: 6px; padding: 10px 12px; font-size: 11px; white-space: pre-wrap; word-break: break-all; line-height: 1.5; height: calc(45vh - 100px); overflow-y: auto; border: 1px solid #334155; }
+.diff-add { background: rgba(34,197,94,0.15); color: #22c55e; display: block; }
+.diff-remove { background: rgba(239,68,68,0.15); color: #ef4444; display: block; }
+.diff-same { color: #475569; display: block; }
+
+/* Wordlist manager */
+.wl-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #0f172a; border-radius: 6px; margin-bottom: 6px; border: 1px solid #1e293b; }
+.wl-name { flex: 1; font-size: 12px; }
+.wl-count { font-size: 11px; color: #475569; }
+.wl-type { font-size: 10px; padding: 2px 6px; border-radius: 3px; }
+.wl-builtin { background: #1e3a5f; color: #60a5fa; }
+.wl-user { background: #3b0764; color: #a78bfa; }
+.wl-delete { background: none; border: none; color: #475569; cursor: pointer; font-size: 14px; padding: 2px 6px; }
+.wl-delete:hover { color: #ef4444; }
+
+/* Upload area */
+.upload-area { border: 2px dashed #334155; border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+.upload-area:hover, .upload-area.dragover { border-color: #a78bfa; }
+.upload-area p { font-size: 12px; color: #475569; margin-top: 8px; }
+
+/* Tabs */
+.tab-bar { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid #334155; }
+.tab-btn { padding: 8px 16px; background: none; border: none; color: #475569; cursor: pointer; font-size: 12px; font-family: 'Courier New', monospace; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab-btn.active { color: #a78bfa; border-bottom-color: #a78bfa; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+</style>
+</head>
+<body>
+
+<nav style="display:flex;align-items:center;background:#0a1628;border-bottom:1px solid #1e293b;padding:0 24px;height:48px;position:sticky;top:0;z-index:1000;margin:-24px -24px 24px -24px;">
+  <div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#38bdf8;margin-right:32px;white-space:nowrap;">Interceptor<span style="color:#f472b6;">X</span></div>
+  <div style="display:flex;gap:2px;flex:1;">
+    <a href="/dashboard" class="nav-tab">⬛ Proxy</a>
+    <a href="/intercept" class="nav-tab">⏸ Intercept</a>
+    <a href="/intruder"  class="nav-tab nav-active">🎯 Intruder</a>
+    <a href="/analytics" class="nav-tab">📊 Analytics</a>
+  </div>
+  <span style="font-size:10px;color:#1e293b;">v0.2.0</span>
+</nav>
+
+<!-- Main tabs -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('attack',this)">🎯 Attack</button>
+  <button class="tab-btn" onclick="switchTab('wordlists',this)">📚 Wordlists</button>
+</div>
+
+<!-- ── ATTACK TAB ── -->
+<div id="tab-attack" class="tab-content active">
+
+<div class="card">
+  <div class="card-title">🎯 Sniper Attack — Target Configuration</div>
+  <div class="marker-hint">
+    Wrap injection points with <code>§markers§</code> — e.g. <code>id=§1§&name=§admin§</code><br>
+    Sniper tests each position with each payload one at a time.
+  </div>
+  <div class="grid3">
+    <div>
+      <label>Method</label>
+      <select id="method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option></select>
+    </div>
+    <div>
+      <label>URL</label>
+      <input type="text" id="url" placeholder="https://target.com/api/user?id=§1§">
+    </div>
+    <div>
+      <button class="btn" onclick="autoMark()" style="background:#1e293b;color:#a78bfa;border:1px solid #a78bfa;padding:9px 14px;white-space:nowrap;">§ Auto-mark</button>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:12px;">
+    <div>
+      <label>Request Headers (JSON)</label>
+      <textarea id="headers" rows="5" placeholder='{"Content-Type":"application/json","Cookie":"session=abc"}'></textarea>
+    </div>
+    <div>
+      <label>Request Body</label>
+      <textarea id="body" rows="5" placeholder="username=§admin§&password=§password§"></textarea>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">💣 Payload Configuration</div>
+  <div class="grid2">
+    <div>
+      <label>Wordlist</label>
+      <select id="wordlist" onchange="loadWordlist()">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:8px;">
+      <button class="btn btn-clear" onclick="clearPayloads()" style="flex:1;">Clear</button>
+      <button class="btn btn-run"   onclick="runAttack()"     style="flex:2;">▶ Run Sniper</button>
+    </div>
+  </div>
+  <label style="margin-top:14px;">Payloads <span style="color:#475569;font-weight:normal;">— one per line. Edit freely or paste custom list.</span></label>
+  <textarea id="payloads" rows="8" placeholder="Loading..."></textarea>
+  <div style="font-size:11px;color:#475569;margin-top:6px;" id="payloadCount">0 payloads</div>
+</div>
+
+<div id="progressSection" style="display:none;" class="card">
+  <div class="card-title">⏳ Running...</div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <div id="progressText" style="font-size:12px;color:#475569;">Sending requests...</div>
+</div>
+
+<div id="resultsSection" style="display:none;">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-wrap:wrap;">
+      <div class="card-title" style="margin:0;">📊 Results</div>
+      <span class="stat-pill" id="statTotal">0 requests</span>
+      <span class="stat-pill" id="statDiff" style="color:#ef4444;"></span>
+      <span class="stat-pill" id="statBaseline"></span>
+      <span style="font-size:11px;color:#475569;margin-left:auto;">Click any row to view diff</span>
+    </div>
+    <div class="filter-bar">
+      <span style="font-size:11px;color:#475569;">Filter:</span>
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('interesting',this)" style="color:#e879f9;border-color:#a21caf;">🎯 Findings only</button>
+      <button class="filter-btn" onclick="setFilter('diff_status',this)" style="color:#ef4444;border-color:#ef4444;">⚡ Status diff</button>
+      <button class="filter-btn" onclick="setFilter('diff_length',this)" style="color:#f59e0b;border-color:#f59e0b;">📏 Length diff</button>
+      <button class="filter-btn" onclick="setFilter('diff_time',this)"   style="color:#60a5fa;border-color:#60a5fa;">⏱ Time diff</button>
+      <input type="text" id="filterSearch" placeholder="Search payload..." oninput="applyFilter()" style="width:180px;padding:5px 10px;font-size:11px;">
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="resultsTable">
+        <thead><tr><th>#</th><th>Position</th><th>Payload</th><th>Status</th><th>Length</th><th>Time (ms)</th><th>Severity</th><th>Findings</th><th>Snippet</th></tr></thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ── WORDLISTS TAB ── -->
+<div id="tab-wordlists" class="tab-content">
+
+  <div class="card">
+    <div class="card-title">📚 Available Wordlists</div>
+    <div id="wordlistManager">Loading...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⬆ Upload Custom Wordlist</div>
+    <div class="grid2">
+      <div>
+        <label>Wordlist Name</label>
+        <input type="text" id="uploadName" placeholder="my-custom-list">
+        <label style="margin-top:12px;">Paste Payloads (one per line)</label>
+        <textarea id="uploadContent" rows="10" placeholder="payload1&#10;payload2&#10;payload3"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-run" onclick="uploadWordlist()" style="flex:1;">💾 Save Wordlist</button>
+        </div>
+        <div id="uploadStatus" style="font-size:12px;margin-top:8px;"></div>
+      </div>
+      <div>
+        <label>Or Drop a .txt File Here</label>
+        <div class="upload-area" id="dropArea" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)" onclick="document.getElementById('fileInput').click()">
+          <div style="font-size:24px;">📂</div>
+          <p>Click or drag & drop a .txt wordlist file</p>
+          <p style="margin-top:4px;font-size:11px;">One payload per line</p>
+        </div>
+        <input type="file" id="fileInput" accept=".txt" style="display:none;" onchange="onFileSelect(event)">
+        <div id="fileInfo" style="font-size:11px;color:#475569;margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Diff Panel ── -->
+<div class="diff-panel" id="diffPanel">
+  <div class="diff-header">
+    <div>
+      <div class="diff-title" id="diffTitle">Response Diff</div>
+      <div style="font-size:11px;color:#475569;margin-top:2px;" id="diffMeta"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:11px;color:#475569;">Press ESC to close</span>
+      <button onclick="closeDiff()" style="background:#ef4444;border:none;color:#fff;cursor:pointer;padding:6px 16px;border-radius:6px;font-size:12px;font-family:'Courier New',monospace;font-weight:bold;">✕ Close</button>
+    </div>
+  </div>
+  <div class="diff-body">
+    <div class="diff-col">
+      <div class="diff-col-title">Baseline Response</div>
+      <div class="diff-content" id="diffBaseline"></div>
+    </div>
+    <div class="diff-col">
+      <div class="diff-col-title" id="diffColTitle">Selected Response</div>
+      <div class="diff-content" id="diffSelected"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _results   = [];
+let _baseline  = null;
+let _activeFilter = 'all';
+let _selectedRow  = null;
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'wordlists') loadWordlistManager();
+}
+
+// ── Load request from history ─────────────────────────────────────────────
+{% if req %}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('method').value = {{ req.method | tojson }};
+  document.getElementById('url').value    = {{ req.url | tojson }};
+  document.getElementById('body').value   = {{ req.request_body | tojson }};
+  const h = {{ req.request_headers | tojson }};
+  document.getElementById('headers').value = JSON.stringify(h, null, 2);
+});
+{% endif %}
+
+// ── Wordlist loading ──────────────────────────────────────────────────────
+let _wordlistMeta = [];
+
+async function initWordlists() {
+  const resp = await fetch('/intruder/wordlists');
+  _wordlistMeta = await resp.json();
+  const sel = document.getElementById('wordlist');
+  sel.innerHTML = _wordlistMeta.map(w =>
+    `<option value="${w.id}">${w.label} (${w.count})</option>`
+  ).join('');
+  loadWordlist();
+}
+
+async function loadWordlist() {
+  const id   = document.getElementById('wordlist').value;
+  if (!id) return;
+  const resp = await fetch('/intruder/wordlists/' + encodeURIComponent(id));
+  const data = await resp.json();
+  document.getElementById('payloads').value = (data.payloads || []).join('\n');
+  updatePayloadCount();
+}
+
+function updatePayloadCount() {
+  const n = document.getElementById('payloads').value.split('\n').filter(l => l.trim()).length;
+  document.getElementById('payloadCount').textContent = n + ' payloads';
+}
+
+document.getElementById('payloads').addEventListener('input', updatePayloadCount);
+initWordlists();
+
+function clearPayloads() {
+  document.getElementById('payloads').value = '';
+  updatePayloadCount();
+}
+
+// ── Auto-mark ─────────────────────────────────────────────────────────────
+function autoMark() {
+  ['url','body'].forEach(id => {
+    const el = document.getElementById(id);
+    let val = el.value;
+    if (val.includes('§')) return;
+    val = val.replace(/([?&][^=&]+)=([^&§\n]+)/g, (_, k, v) => `${k}=§${v}§`);
+    if (id === 'body' && !val.includes('§'))
+      val = val.replace(/([^=&\n]+)=([^&§\n]+)/g, (_, k, v) => `${k}=§${v}§`);
+    el.value = val;
+  });
+}
+
+// ── Run attack ────────────────────────────────────────────────────────────
+async function runAttack() {
+  const method = document.getElementById('method').value;
+  const url    = document.getElementById('url').value.trim();
+  const hdrs   = document.getElementById('headers').value.trim();
+  const body   = document.getElementById('body').value;
+  const raw    = document.getElementById('payloads').value;
+  const wl     = document.getElementById('wordlist').value;
+
+  if (!url) { alert('URL is required.'); return; }
+
+  const custom_payloads = raw.split('\n').map(p => p.trim()).filter(Boolean);
+  let headers_obj = {};
+  if (hdrs) { try { headers_obj = JSON.parse(hdrs); } catch(e) { alert('Headers must be valid JSON.'); return; } }
+
+  document.getElementById('progressSection').style.display = 'block';
+  document.getElementById('resultsSection').style.display  = 'none';
+  document.getElementById('progressFill').style.width      = '10%';
+  closeDiff();
+
+  try {
+    const resp = await fetch('/intruder/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method, url, headers: headers_obj, body, wordlist: wl, custom_payloads }),
+    });
+    document.getElementById('progressFill').style.width = '90%';
+    const data = await resp.json();
+    document.getElementById('progressFill').style.width = '100%';
+    if (data.error) { alert('Error: ' + data.error); document.getElementById('progressSection').style.display = 'none'; return; }
+    _results  = data.results  || [];
+    _baseline = data.baseline || null;
+    renderResults(data);
+  } catch(e) { alert('Network error: ' + e.message); }
+  document.getElementById('progressSection').style.display = 'none';
+}
+
+// ── Render results ────────────────────────────────────────────────────────
+function renderResults(data) {
+  document.getElementById('resultsSection').style.display = 'block';
+  const diffCount = _results.filter(r => r.diff_status || r.diff_length || r.diff_time).length;
+  document.getElementById('statTotal').textContent    = data.total + ' requests sent';
+  const findingsCount = _results.filter(r => r.interesting).length;
+  const statDiff = document.getElementById('statDiff');
+  if (findingsCount > 0) {
+    statDiff.textContent = '🎯 ' + findingsCount + ' findings';
+    statDiff.style.color = '#e879f9';
+  } else {
+    statDiff.textContent = '✅ 0 findings — all safe';
+    statDiff.style.color = '#22c55e';
+  }
+  document.getElementById('statBaseline').textContent = _baseline ? `Baseline: ${_baseline.status} / ${_baseline.length}B / ${_baseline.time_ms}ms` : '';
+  _activeFilter = 'all';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.filter-btn').classList.add('active');
+  renderTable(_results);
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+  if (_baseline) {
+    const tr = document.createElement('tr');
+    tr.className = 'baseline-row';
+    tr.innerHTML = `<td>—</td><td>—</td><td style="color:#475569;">(baseline)</td><td>${statusBadge(_baseline.status)}</td><td>${_baseline.length}</td><td>${_baseline.time_ms}</td><td></td><td class="body-snippet">${escHtml(_baseline.body||'')}</td>`;
+    tbody.appendChild(tr);
+  }
+  rows.forEach((r, i) => {
+    const sev   = r.severity || 'SAFE';
+    const rowCls = sev === 'CRITICAL' ? 'sev-critical-row' : sev === 'HIGH' ? 'sev-high-row' : '';
+    const findings = Array.isArray(r.findings) ? r.findings : [];
+    const findingsHtml = findings.length > 0
+      ? findings.map(f => `<span class="finding-item finding-${f.severity}">${escHtml(f.type)}</span>`).join(' ')
+      : '<span style="color:#334155;font-size:11px;">—</span>';
+
+    const tr = document.createElement('tr');
+    tr.className = rowCls;
+    tr.dataset.diffStatus  = r.diff_status  ? '1' : '0';
+    tr.dataset.diffLength  = r.diff_length  ? '1' : '0';
+    tr.dataset.diffTime    = r.diff_time    ? '1' : '0';
+    tr.dataset.interesting = r.interesting  ? '1' : '0';
+    tr.dataset.payload     = (r.payload||'').toLowerCase();
+    tr.dataset.idx         = i;
+    tr.onclick = () => showDiff(i, tr);
+    tr.innerHTML = `
+      <td style="color:#475569;">${i+1}</td>
+      <td style="color:#94a3b8;">${escHtml(r.position||'')}</td>
+      <td class="payload-cell" title="${escHtml(r.payload||'')}">${escHtml(r.payload||'')}</td>
+      <td>${r.error ? '<span class="badge s-err">ERR</span>' : statusBadge(r.status)}</td>
+      <td>${r.length}</td>
+      <td style="${r.diff_time?'color:#60a5fa;':''}">${r.time_ms}</td>
+      <td><span class="badge sev-${sev}">${sev}</span></td>
+      <td>${findingsHtml}</td>
+      <td class="body-snippet">${escHtml(r.error||r.body||'')}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Diff viewer ───────────────────────────────────────────────────────────
+function showDiff(idx, row) {
+  if (!_baseline) return;
+  const r = _results[idx];
+  if (!r) return;
+
+  // Highlight selected row
+  if (_selectedRow) _selectedRow.classList.remove('selected');
+  row.classList.add('selected');
+  _selectedRow = row;
+
+  document.getElementById('diffTitle').textContent =
+    `Diff: Baseline vs Payload #${idx+1}`;
+  const findings = Array.isArray(r.findings) ? r.findings : [];
+  const findingsSummary = findings.length > 0
+    ? '  |  🎯 ' + findings.map(f => f.type).join(', ')
+    : '';
+  document.getElementById('diffMeta').textContent =
+    `Payload: ${r.payload}  |  Status: ${r.status}  |  Length: ${r.length}B  |  Time: ${r.time_ms}ms  |  Severity: ${r.severity||'SAFE'}${findingsSummary}`;
+  document.getElementById('diffColTitle').textContent =
+    `Payload Response (${r.status} / ${r.length}B)`;
+
+  const baseText = (_baseline.body || '').trim();
+  const selText  = (r.body || r.error || '').trim();
+
+  document.getElementById('diffBaseline').innerHTML = renderDiff(baseText, selText, 'base');
+  document.getElementById('diffSelected').innerHTML = renderDiff(baseText, selText, 'sel');
+
+  document.getElementById('diffPanel').classList.add('open');
+  document.body.classList.add('diff-open');
+}
+
+function renderDiff(base, sel, side) {
+  const baseLines = base.split('\n');
+  const selLines  = sel.split('\n');
+  const maxLen    = Math.max(baseLines.length, selLines.length);
+  let html = '';
+  for (let i = 0; i < maxLen; i++) {
+    const bl = baseLines[i] !== undefined ? escHtml(baseLines[i]) : '';
+    const sl = selLines[i]  !== undefined ? escHtml(selLines[i])  : '';
+    if (side === 'base') {
+      if (bl !== sl) html += `<span class="diff-remove">${bl||' '}</span>`;
+      else           html += `<span class="diff-same">${bl}</span>`;
+    } else {
+      if (bl !== sl) html += `<span class="diff-add">${sl||' '}</span>`;
+      else           html += `<span class="diff-same">${sl}</span>`;
+    }
+  }
+  return html || '<span style="color:#475569;">(empty)</span>';
+}
+
+function closeDiff() {
+  document.getElementById('diffPanel').classList.remove('open');
+  document.body.classList.remove('diff-open');
+  if (_selectedRow) { _selectedRow.classList.remove('selected'); _selectedRow = null; }
+}
+
+// ── Filtering ─────────────────────────────────────────────────────────────
+function setFilter(filter, btn) {
+  _activeFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
+function applyFilter() {
+  const search = (document.getElementById('filterSearch').value||'').toLowerCase();
+  document.querySelectorAll('#resultsBody tr:not(.baseline-row)').forEach(tr => {
+    const mf = _activeFilter === 'all'         ? true :
+               _activeFilter === 'interesting'  ? tr.dataset.interesting === '1' :
+               _activeFilter === 'diff_status'  ? tr.dataset.diffStatus  === '1' :
+               _activeFilter === 'diff_length'  ? tr.dataset.diffLength  === '1' :
+               _activeFilter === 'diff_time'    ? tr.dataset.diffTime    === '1' : true;
+    const ms = !search || (tr.dataset.payload||'').includes(search);
+    tr.style.display = (mf && ms) ? '' : 'none';
+  });
+}
+
+// ── Wordlist manager ──────────────────────────────────────────────────────
+async function loadWordlistManager() {
+  const resp = await fetch('/intruder/wordlists');
+  const list = await resp.json();
+  const container = document.getElementById('wordlistManager');
+  if (!list.length) { container.innerHTML = '<p style="color:#475569;font-size:12px;">No wordlists found.</p>'; return; }
+  container.innerHTML = list.map(w => `
+    <div class="wl-item">
+      <span class="wl-type ${w.type === 'builtin' ? 'wl-builtin' : 'wl-user'}">${w.type}</span>
+      <span class="wl-name">${escHtml(w.label)}</span>
+      <span class="wl-count">${w.count} payloads</span>
+      ${w.type === 'user' ? `<button class="wl-delete" onclick="deleteWordlist('${w.file.replace('.txt','')}','${escHtml(w.label)}')" title="Delete">🗑</button>` : ''}
+    </div>`).join('');
+}
+
+async function uploadWordlist() {
+  const name    = document.getElementById('uploadName').value.trim();
+  const content = document.getElementById('uploadContent').value.trim();
+  const status  = document.getElementById('uploadStatus');
+  if (!name)    { status.innerHTML = '<span style="color:#ef4444;">Name is required.</span>'; return; }
+  if (!content) { status.innerHTML = '<span style="color:#ef4444;">Content is required.</span>'; return; }
+  const resp = await fetch('/intruder/wordlists/upload', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, content }),
+  });
+  const data = await resp.json();
+  if (data.error) { status.innerHTML = `<span style="color:#ef4444;">${data.error}</span>`; return; }
+  status.innerHTML = `<span style="color:#22c55e;">✅ Saved "${data.label}" with ${data.count} payloads</span>`;
+  document.getElementById('uploadName').value    = '';
+  document.getElementById('uploadContent').value = '';
+  loadWordlistManager();
+  initWordlists();
+}
+
+async function deleteWordlist(name, label) {
+  if (!confirm(`Delete wordlist "${label}"?`)) return;
+  await fetch('/intruder/wordlists/user/' + encodeURIComponent(name), { method: 'DELETE' });
+  loadWordlistManager();
+  initWordlists();
+}
+
+// ── File drop ─────────────────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); document.getElementById('dropArea').classList.add('dragover'); }
+function onDragLeave(e) { document.getElementById('dropArea').classList.remove('dragover'); }
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropArea').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file);
+}
+function onFileSelect(e) { const file = e.target.files[0]; if (file) readFile(file); }
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const content = e.target.result;
+    const name    = file.name.replace('.txt','');
+    document.getElementById('uploadName').value    = name;
+    document.getElementById('uploadContent').value = content;
+    const lines = content.split('\n').filter(l => l.trim()).length;
+    document.getElementById('fileInfo').textContent = `📄 ${file.name} — ${lines} payloads loaded. Click "Save Wordlist" to save.`;
+  };
+  reader.readAsText(file);
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function statusBadge(s) {
+  if (!s) return '<span class="badge s-err">—</span>';
+  const cls = s>=500?'s5xx':s>=400?'s4xx':s>=300?'s3xx':'s2xx';
+  return `<span class="badge ${cls}">${s}</span>`;
+}
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ESC to close diff panel
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDiff();
+});
+</script>
+</body>
+</html>
