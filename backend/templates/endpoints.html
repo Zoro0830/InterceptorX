@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Endpoints — InterceptorX</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0f172a; color: #e2e8f0; font-family: 'Courier New', monospace; padding: 24px; }
+.nav-tab { padding: 0 16px; height: 48px; display: inline-flex; align-items: center; font-size: 12px; font-family: 'Courier New', monospace; color: #475569; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+.nav-tab:hover { color: #94a3b8; text-decoration: none; }
+.nav-active { color: #22d3ee !important; border-bottom-color: #22d3ee !important; }
+
+.card { background: #1e293b; border-radius: 10px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+.card-title { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+
+/* Stats row */
+.stats-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.stat-pill {
+  background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+  padding: 10px 16px; cursor: pointer; transition: border-color 0.15s;
+  display: flex; flex-direction: column; align-items: center; min-width: 100px;
+}
+.stat-pill:hover, .stat-pill.active { border-color: #22d3ee; }
+.stat-pill.active .pill-count { color: #22d3ee; }
+.pill-count { font-size: 22px; font-weight: bold; color: #e2e8f0; }
+.pill-label { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+/* Type badges */
+.type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+.type-api       { background: #1e3a5f; color: #60a5fa; }
+.type-fetch     { background: #1e3a5f; color: #93c5fd; }
+.type-xhr       { background: #0c1a3b; color: #818cf8; }
+.type-graphql   { background: #3b0764; color: #c084fc; }
+.type-websocket { background: #052e16; color: #4ade80; }
+.type-admin     { background: #450a0a; color: #f87171; }
+.type-auth      { background: #451a03; color: #fb923c; }
+.type-file      { background: #1e293b; color: #94a3b8; }
+.type-webhook   { background: #1a2e05; color: #86efac; }
+.type-path      { background: #1e293b; color: #64748b; }
+.type-nextjs_route { background: #0f2937; color: #67e8f9; }
+
+/* Toolbar */
+.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.search-input { flex: 1; min-width: 200px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-family: 'Courier New', monospace; font-size: 12px; outline: none; }
+.search-input:focus { border-color: #22d3ee; }
+.btn { padding: 7px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 11px; font-family: 'Courier New', monospace; font-weight: bold; }
+.btn-clear  { background: #450a0a; color: #f87171; border: 1px solid #991b1b; }
+.btn-export { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+
+/* Table */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: #0f172a; padding: 10px 12px; text-align: left; font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: 1px; position: sticky; top: 48px; white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+tr:hover td { background: #1e293b; }
+.url-cell { max-width: 500px; word-break: break-all; color: #22d3ee; font-size: 11px; }
+.source-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475569; font-size: 11px; }
+.action-btns { display: flex; gap: 6px; white-space: nowrap; }
+.btn-repeater { background: #1e3a5f; color: #60a5fa; border: 1px solid #1e40af; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: 'Courier New', monospace; text-decoration: none; }
+.btn-intruder  { background: #3b0764; color: #c084fc; border: 1px solid #6b21a8; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: 'Courier New', monospace; }
+.btn-copy { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: 'Courier New', monospace; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: #334155; border: 1px dashed #1e293b; border-radius: 10px; }
+.empty-icon  { font-size: 32px; margin-bottom: 12px; }
+
+.times-seen { font-size: 10px; color: #475569; }
+</style>
+</head>
+<body>
+
+<nav style="display:flex;align-items:center;background:#0a1628;border-bottom:1px solid #1e293b;padding:0 24px;height:48px;position:sticky;top:0;z-index:1000;margin:-24px -24px 24px -24px;">
+  <div style="font-size:16px;font-weight:700;letter-spacing:2px;color:#38bdf8;margin-right:32px;white-space:nowrap;">Interceptor<span style="color:#f472b6;">X</span></div>
+  <div style="display:flex;gap:2px;flex:1;">
+    <a href="/dashboard" class="nav-tab">⬛ Proxy</a>
+    <a href="/intercept" class="nav-tab">⏸ Intercept</a>
+    <a href="/intruder"  class="nav-tab">🎯 Intruder</a>
+    <a href="/endpoints" class="nav-tab nav-active">🔍 Endpoints</a>
+    <a href="/analytics" class="nav-tab">📊 Analytics</a>
+  </div>
+  <span style="font-size:10px;color:#1e293b;">v0.3.0</span>
+</nav>
+
+<!-- Stats row -->
+<div class="stats-row" id="statsRow">
+  <div class="stat-pill active" onclick="setType('all',this)" id="pill-all">
+    <span class="pill-count" id="count-all">0</span>
+    <span class="pill-label">All</span>
+  </div>
+  <div class="stat-pill" onclick="setType('api',this)" id="pill-api">
+    <span class="pill-count" id="count-api" style="color:#60a5fa;">0</span>
+    <span class="pill-label">API</span>
+  </div>
+  <div class="stat-pill" onclick="setType('fetch',this)" id="pill-fetch">
+    <span class="pill-count" id="count-fetch" style="color:#93c5fd;">0</span>
+    <span class="pill-label">fetch()</span>
+  </div>
+  <div class="stat-pill" onclick="setType('graphql',this)" id="pill-graphql">
+    <span class="pill-count" id="count-graphql" style="color:#c084fc;">0</span>
+    <span class="pill-label">GraphQL</span>
+  </div>
+  <div class="stat-pill" onclick="setType('websocket',this)" id="pill-websocket">
+    <span class="pill-count" id="count-websocket" style="color:#4ade80;">0</span>
+    <span class="pill-label">WebSocket</span>
+  </div>
+  <div class="stat-pill" onclick="setType('admin',this)" id="pill-admin">
+    <span class="pill-count" id="count-admin" style="color:#f87171;">0</span>
+    <span class="pill-label">Admin</span>
+  </div>
+  <div class="stat-pill" onclick="setType('auth',this)" id="pill-auth">
+    <span class="pill-count" id="count-auth" style="color:#fb923c;">0</span>
+    <span class="pill-label">Auth</span>
+  </div>
+  <div class="stat-pill" onclick="setType('path',this)" id="pill-path">
+    <span class="pill-count" id="count-path" style="color:#64748b;">0</span>
+    <span class="pill-label">Path</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <input type="text" class="search-input" id="searchInput"
+      placeholder="Search endpoints..." oninput="debounceLoad()">
+    <button class="btn btn-export" onclick="exportEndpoints()">⬇ Export</button>
+    <button class="btn btn-clear"  onclick="clearEndpoints()">🗑 Clear All</button>
+    <span style="font-size:11px;color:#475569;" id="filteredCount"></span>
+  </div>
+
+  <!-- Manual JS scan -->
+  <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:14px;margin-bottom:14px;">
+    <div style="font-size:11px;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">🔧 Manual JS Scan — paste a JS file URL to extract endpoints directly</div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="manualUrl" placeholder="https://target.com/assets/app.js"
+        style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-family:'Courier New',monospace;font-size:12px;outline:none;">
+      <button id="scanBtn" onclick="manualScan()" style="padding:8px 16px;background:#1e3a5f;color:#60a5fa;border:1px solid #1e40af;border-radius:6px;cursor:pointer;font-family:'Courier New',monospace;font-size:12px;font-weight:bold;white-space:nowrap;pointer-events:auto;z-index:99;position:relative;">🔍 Scan JS</button>
+    </div>
+    <div id="scanResult" style="font-size:11px;margin-top:8px;color:#475569;"></div>
+  </div>
+
+  <div id="tableContainer">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🔍</div>
+      <p style="font-size:13px;color:#475569;line-height:1.8;">
+        No endpoints discovered yet.<br>
+        Browse your target through the proxy — InterceptorX will<br>
+        automatically extract endpoints from every JS file captured.
+      </p>
+    </div>
+    <table id="endpointsTable" style="display:none;">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Type</th>
+          <th>Endpoint URL</th>
+          <th>Source JS</th>
+          <th>Seen</th>
+          <th>First Found</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="endpointsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let _activeType = 'all';
+let _debounceTimer = null;
+let _allEndpoints = [];
+
+async function loadEndpoints() {
+  const search = document.getElementById('searchInput').value.trim();
+  const params = new URLSearchParams({ type: _activeType });
+  if (search) params.append('search', search);
+
+  try {
+    const resp = await fetch('/endpoints/data?' + params.toString());
+    const data = await resp.json();
+    _allEndpoints = data.endpoints || [];
+    renderTable(_allEndpoints);
+    updateCounts(data.counts || {}, data.total || 0);
+    document.getElementById('filteredCount').textContent =
+      data.filtered !== data.total
+        ? `Showing ${data.filtered} of ${data.total}`
+        : `${data.total} total`;
+  } catch(e) {
+    console.error('Failed to load endpoints:', e);
+  }
+}
+
+function updateCounts(counts, total) {
+  document.getElementById('count-all').textContent = total;
+  const types = ['api','fetch','xhr','graphql','websocket','admin','auth','file','webhook','path','nextjs_route'];
+  types.forEach(t => {
+    const el = document.getElementById('count-' + t);
+    if (el) el.textContent = counts[t] || 0;
+  });
+}
+
+function renderTable(endpoints) {
+  const tbody  = document.getElementById('endpointsBody');
+  const table  = document.getElementById('endpointsTable');
+  const empty  = document.getElementById('emptyState');
+
+  if (!endpoints.length) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  empty.style.display = 'none';
+  tbody.innerHTML = '';
+
+  endpoints.forEach((ep, i) => {
+    const tr = document.createElement('tr');
+    const typeClass = 'type-' + (ep.type || 'path');
+    const ts = ep.first_seen ? ep.first_seen.substring(0, 16) : '';
+
+    // Build intruder URL with marker
+    const intruderUrl = encodeURIComponent(ep.url + (ep.url.includes('?') ? '&param=§test§' : '?param=§test§'));
+
+    tr.innerHTML = `
+      <td style="color:#475569;">${i + 1}</td>
+      <td><span class="type-badge ${typeClass}">${escHtml(ep.type || 'path')}</span></td>
+      <td class="url-cell">${escHtml(ep.url)}</td>
+      <td class="source-cell" title="${escHtml(ep.source_url || '')}">${escHtml(shortUrl(ep.source_url || ''))}</td>
+      <td class="times-seen">${ep.times_seen || 1}×</td>
+      <td style="color:#475569;font-size:11px;white-space:nowrap;">${ts}</td>
+      <td>
+        <div class="action-btns">
+          <button class="btn-copy"     onclick="copyUrl('${escAttr(ep.url)}')">📋 Copy</button>
+          <a      class="btn-repeater" href="/request/1?prefill=${encodeURIComponent(ep.url)}" target="_blank">↺ Repeater</a>
+          <button class="btn-intruder" onclick="sendToIntruder('${escAttr(ep.url)}')">🎯 Intruder</button>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function setType(type, el) {
+  _activeType = type;
+  document.querySelectorAll('.stat-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  loadEndpoints();
+}
+
+function debounceLoad() {
+  clearTimeout(_debounceTimer);
+  _debounceTimer = setTimeout(loadEndpoints, 300);
+}
+
+function copyUrl(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    // brief flash feedback
+  });
+}
+
+function sendToIntruder(url) {
+  const marked = url.includes('?')
+    ? url.replace(/=([^&]*)/g, '=§$1§')
+    : url + '?param=§test§';
+  window.location.href = '/intruder?url=' + encodeURIComponent(marked);
+}
+
+function exportEndpoints() {
+  const lines = _allEndpoints.map(ep =>
+    `${ep.type}\t${ep.url}\t${ep.source_url || ''}`
+  ).join('\n');
+  const header = 'Type\tURL\tSource JS\n';
+  const blob   = new Blob([header + lines], { type: 'text/plain' });
+  const a      = document.createElement('a');
+  a.href       = URL.createObjectURL(blob);
+  a.download   = 'interceptorx_endpoints.txt';
+  a.click();
+}
+
+async function clearEndpoints() {
+  if (!confirm('Clear all discovered endpoints? This cannot be undone.')) return;
+  await fetch('/endpoints/clear', { method: 'POST' });
+  loadEndpoints();
+}
+
+function shortUrl(url) {
+  try {
+    const u = new URL(url);
+    const p = u.pathname;
+    return p.length > 40 ? '...' + p.slice(-37) : p;
+  } catch { return url.slice(-40); }
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(s) {
+  return String(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+
+// Auto-refresh every 5 seconds
+loadEndpoints();
+setInterval(loadEndpoints, 5000);
+</script>
+</body>
+</html>

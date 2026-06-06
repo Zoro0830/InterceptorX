@@ -18,6 +18,12 @@ try:
 except ImportError:
     _INTERCEPT_AVAILABLE = False
 
+try:
+    import js_extractor
+    _JS_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    _JS_EXTRACTOR_AVAILABLE = False
+
 # In-memory flow registry — flow_id to mitmproxy flow object
 # intercept_store.json holds metadata + decisions for Flask to read/write
 _flow_registry: dict = {}
@@ -326,11 +332,41 @@ def response(flow: http.HTTPFlow):
     method = flow.request.method
     if method not in ALLOWED_METHODS:
         return
- 
+
     url = flow.request.pretty_url
+
+    # ── Passive JS endpoint extraction ───────────────────────────────────────
+    # Runs BEFORE should_ignore so JS files from CDNs are also scanned.
+    # JS files are normally filtered out from traffic logs but we still
+    # want to extract endpoints from them.
+    if _JS_EXTRACTOR_AVAILABLE and flow.response.status_code == 200:
+        content_type = flow.response.headers.get("content-type", "").lower()
+        is_js = (
+            "javascript" in content_type or
+            "ecmascript" in content_type or
+            url.endswith(".js") or
+            ".js?" in url or
+            "/assets/" in url or
+            "/chunks/" in url or
+            "/bundles/" in url or
+            "webpack" in url.lower()
+        )
+        if is_js:
+            try:
+                js_body = flow.response.get_text(strict=False) or ""
+                print(f"📄 JS file detected: {url[:80]} ({len(js_body)} bytes)")
+                if len(js_body) > 200:
+                    endpoints = js_extractor.extract_endpoints(js_body, url)
+                    print(f"   → Found {len(endpoints)} endpoints")
+                    if endpoints:
+                        added = js_extractor.save_endpoints(endpoints)
+                        print(f"   → Saved {added} new endpoints")
+            except Exception as e:
+                print(f"   → JS extraction error: {e}")
+
     if should_ignore(url):
         return
- 
+
     if not is_interesting_response(flow):
         return
  

@@ -1,357 +1,264 @@
 # InterceptorX
 
-A lightweight passive and active web application security testing platform built with Python for educational and authorized security assessment. InterceptorX combines HTTP/HTTPS traffic interception, request replay, heuristic vulnerability analysis, JWT inspection, scope management, and interactive analytics dashboards in a unified interface.
+A lightweight web application security testing platform inspired by Burp Suite workflows. Built with Python, mitmproxy, and Flask for educational and authorized security testing purposes.
 
-> ⚠️ **Legal Warning:** InterceptorX is intended strictly for educational purposes and authorized security testing only. Do not use this tool against systems you do not own or do not have explicit written permission to test.
-
----
-
-# Features
-
-## Core Platform
-- ✅ HTTP/HTTPS traffic interception powered by **mitmproxy**
-- ✅ Live traffic monitoring dashboard with auto-refresh
-- ✅ Full request and response inspection
-- ✅ One-click Windows startup script (`start_interceptorx.bat`)
-- ✅ SQLite-based traffic logging with WAL mode for improved concurrency
+> ⚠️ For authorized security testing only. Always obtain explicit written permission before testing any target.
 
 ---
 
-## Passive Security Analysis
+## What is InterceptorX?
 
-InterceptorX automatically analyzes captured traffic for suspicious patterns.
-
-### Detection Capabilities
-- ✅ SQL Injection pattern detection
-- ✅ Cross-Site Scripting (XSS) pattern detection
-- ✅ Heuristic IDOR detection (user-controlled identifiers)
-- ✅ Path Traversal detection
-- ✅ Sensitive Data Exposure detection:
-  - Credit card numbers (Luhn validated)
-  - Plaintext password leakage
-  - API key / secret exposure
-- ✅ Missing security headers detection:
-  - Content-Security-Policy (CSP)
-  - Strict-Transport-Security (HSTS)
-  - X-Frame-Options
-  - X-Content-Type-Options
-- ✅ JWT token detection in requests and API responses
+InterceptorX is a personal security testing tool that sits between your browser and the internet, capturing and analyzing HTTP/HTTPS traffic. It provides tools for manual testing, fuzzing, and passive reconnaissance — similar to Burp Suite Community Edition but built from scratch in Python.
 
 ---
 
-## Active Security Testing
+## Features
 
-InterceptorX supports controlled active testing against authorized targets.
+### 🔴 Proxy & Interception
+- HTTP/HTTPS traffic capture via mitmproxy
+- **Live intercept mode** — pause requests before forwarding, edit and release
+- Toggle intercept on/off — queue multiple requests simultaneously
+- Forward, Drop, or Edit+Forward each intercepted request
+- Auto-refresh traffic dashboard
 
-### Active Testing Features
-- ✅ SQL Injection payload injection
-- ✅ Database error signature analysis
-- ✅ Reflected XSS payload testing
-- ✅ IDOR enumeration with baseline comparison
-- ✅ Request budget cap to reduce accidental denial-of-service
-- ✅ Scope enforcement to prevent testing out-of-scope targets
+### 🔁 Request Repeater
+- Resend any captured request with modifications
+- Raw HTTP editor mode
+- Named persistent sessions with automatic cookie management
+- CSRF token auto-extraction
+- Redirect control — follow or inspect 302 responses
+
+### 🎯 Intruder / Fuzzer (Sniper Mode)
+- Mark injection points with `§markers§`
+- Auto-mark common parameters with one click
+- 8 built-in wordlists — SQLi, XSS, LFI, SSTI, Open Redirect, Passwords, Dirs, Params
+- Upload custom `.txt` wordlist files
+- **Smart detection engine** — finds real vulnerabilities, not just length diffs:
+  - SQL error signatures (MySQL, PostgreSQL, MSSQL, Oracle, SQLite)
+  - XSS reflection detection
+  - SSTI evaluation confirmation (`{{7*7}}` → `49`)
+  - LFI success markers (`root:x:0:0`)
+  - Command injection output detection
+  - Open redirect via Location header
+  - Time-based SQLi (4000ms threshold)
+- Response diff viewer — click any result to compare baseline vs payload
+- Severity badges — CRITICAL, HIGH, MEDIUM, SAFE
+- Filter by findings only — hide false positives instantly
+
+### 🔍 JS Endpoint Extractor
+- Passively scans every JS file captured by the proxy
+- Extracts API routes, fetch() calls, axios() calls, GraphQL endpoints, WebSocket URLs, admin paths, auth endpoints
+- Categorized endpoint inventory — API, fetch, GraphQL, WebSocket, Admin, Auth, Path
+- Send any discovered endpoint directly to Intruder or Repeater
+- Export full endpoint list as .txt
+- Manual JS scan for specific files
+
+### 🔐 JWT Decoder
+- Decode any JWT token without signature verification
+- View header, payload, and signature separately
+- Detect JWT tokens in captured requests and responses automatically
+
+### 🎯 Scope Manager
+- Define allowed and blocked domains with wildcard support (`*.example.com`)
+- CDN and analytics domains auto-excluded
+- Active testing enforces scope automatically
+- Scope persists across restarts
+
+### 🛡️ SSRF Protection
+- Blocks replays to private/internal IP ranges
+- DNS rebinding protection — resolves hostnames and checks IPs
+- Covers localhost, 10.x, 172.16.x, 192.168.x, link-local, CGNAT ranges
+
+### 📊 Analytics Dashboard
+- Severity breakdown chart (doughnut)
+- Finding types chart (horizontal bar)
+- Requests over time chart (stacked line)
+- Auto-refreshes every 10 seconds
+
+### 📄 Report Export
+- Export findings as JSON
+- Export findings as styled HTML report
+- Reports include severity, findings, timestamps
+
+### ⚙️ Session Management
+- Multiple named sessions with isolated cookie jars
+- Manual cookie injection
+- Session reset and delete
+- Cookie persistence across requests
 
 ---
 
-## Request Repeater
+## Tech Stack
 
-Captured requests can be modified and replayed.
-
-### Repeater Capabilities
-- ✅ Modify and resend captured requests
-- ✅ Raw HTTP request editor
-- ✅ Named persistent sessions
-- ✅ Cookie persistence across requests
-- ✅ Cookie injection support
-- ✅ Redirect handling (follow or inspect redirects)
-- ✅ Automatic CSRF token extraction
+| Component | Technology |
+|-----------|-----------|
+| Proxy engine | Python, mitmproxy 12.2.2 |
+| Backend | Flask 3.1.3 |
+| Database | SQLite (WAL mode) |
+| HTTP client | requests 2.34.0 |
+| Charts | Chart.js (local) |
+| Frontend | HTML, CSS, Vanilla JS |
 
 ---
 
-## Additional Security Tools
+## Project Structure
 
-### JWT Inspector
-- ✅ Decode JWT token structure
-- ✅ Inspect header
-- ✅ Inspect payload
-- ✅ View raw signature segment
-
-> **Note:** JWT signatures are **not cryptographically verified**. This module is for inspection only.
-
----
-
-### Scope Manager
-- ✅ Wildcard domain allow lists
-- ✅ Explicit block lists
-- ✅ CDN / analytics domain auto-exclusion
-- ✅ Scope enforcement for active testing
-
-Example:
-```text
-*.example.com
-api.target.com
 ```
-
----
-
-### SSRF Protection
-
-Request replay is protected against unsafe destinations.
-
-Protections include:
-- ✅ Localhost blocking
-- ✅ Private IP blocking
-- ✅ Internal subnet blocking
-- ✅ DNS rebinding protection
-- ✅ Unsafe protocol rejection
-
----
-
-### Analytics Dashboard
-
-Interactive visual dashboards for captured traffic.
-
-Includes:
-- ✅ Severity breakdown charts
-- ✅ Finding distribution charts
-- ✅ Request timeline trends
-
----
-
-### Report Export
-
-Generate structured reports for documentation.
-
-Supported formats:
-- ✅ JSON export
-- ✅ HTML export
-
----
-
-# Technology Stack
-
-- **Python 3.x**
-- **Flask**
-- **mitmproxy**
-- **SQLite**
-- **requests**
-- **Chart.js**
-
----
-
-# Project Structure
-
-```text
-BURPZIP/
-├── start_interceptorx.bat
-├── requirements.txt
+burpzip/
+├── start_interceptorx.bat          ← One-click launcher (Windows)
 ├── README.md
-│
+├── requirements.txt
 ├── backend/
-│   ├── app.py
-│   ├── config.py
-│   ├── db.py
-│   ├── database_setup.py
-│   ├── active_testing.py
-│   ├── repeater.py
-│   ├── session_store.py
-│   ├── scope.py
-│   ├── ssrf.py
-│   ├── jwt_utils.py
-│   ├── report_export.py
-│   │
-│   ├── database/
-│   │   └── traffic.db
-│   │
+│   ├── app.py                      ← Flask routes and API
+│   ├── config.py                   ← Central LAB_MODE configuration
+│   ├── db.py                       ← SQLite helpers (WAL mode)
+│   ├── active_testing.py           ← Active vulnerability tester
+│   ├── intruder.py                 ← Sniper fuzzer engine
+│   ├── repeater.py                 ← Session-aware request replayer
+│   ├── session_store.py            ← Named session management
+│   ├── scope.py                    ← Scope enforcement
+│   ├── ssrf.py                     ← SSRF protection
+│   ├── jwt_utils.py                ← JWT decoder
+│   ├── js_extractor.py             ← Passive JS endpoint extractor
+│   ├── wordlist_store.py           ← Built-in and custom wordlists
+│   ├── intercept_store.py          ← Shared intercept queue (IPC)
+│   ├── report_export.py            ← JSON/HTML report generation
+│   ├── database_setup.py           ← DB initialization
+│   ├── wordlists/                  ← Built-in wordlist files
+│   │   ├── sqli.txt                (104 payloads)
+│   │   ├── xss.txt                 (82 payloads)
+│   │   ├── lfi.txt                 (69 payloads)
+│   │   ├── ssti.txt                (35 payloads)
+│   │   ├── open_redirect.txt       (30 payloads)
+│   │   ├── passwords.txt           (109 payloads)
+│   │   ├── dirs.txt                (140 payloads)
+│   │   ├── params.txt              (106 payloads)
+│   │   └── user/                   ← User-uploaded wordlists
 │   └── templates/
 │       ├── dashboard.html
 │       ├── request_detail.html
+│       ├── intercept.html
+│       ├── intruder.html
+│       ├── endpoints.html
 │       └── interceptorx_charts.html
-│
-├── proxy/
-│   └── interceptor.py
-│
-├── docs/
-├── frontend/
-└── screenshots/
+└── proxy/
+    └── interceptor.py              ← mitmproxy addon (passive scanner + JS extractor)
 ```
 
 ---
 
-# Installation
+## Setup
 
-## 1. Create Virtual Environment
-
-### Windows
 ```bash
+# 1. Create virtual environment
 python -m venv .venv
+
+# 2. Activate it (Windows)
 .venv\Scripts\activate
-```
 
-### Linux / macOS
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
----
-
-## 2. Install Dependencies
-
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
-```
 
----
-
-## 3. Initialize Database
-
-```bash
+# 4. Initialize database
 python backend/database_setup.py
 ```
 
 ---
 
-# Running InterceptorX
+## Running
 
-## Option A — One Click (Windows)
+### Option A — One click (Windows)
+Double-click `start_interceptorx.bat`
 
-Double-click:
+Automatically:
+- Activates virtual environment
+- Initializes database if needed
+- Starts Flask dashboard on port 5000
+- Starts mitmproxy proxy on port 8080
+- Opens dashboard in browser
 
-```text
-start_interceptorx.bat
-```
-
-This will:
-- Activate virtual environment
-- Initialize database
-- Start Flask dashboard
-- Start mitmproxy interception engine
-- Open dashboard automatically
-
----
-
-## Option B — Manual Startup
-
-### Terminal 1 — Flask Dashboard
-
+### Option B — Manual
 ```bash
+# Terminal 1 — Flask dashboard
 cd backend
 python app.py
-```
 
-### Terminal 2 — Proxy Engine
-
-```bash
+# Terminal 2 — mitmproxy
 cd proxy
 mitmdump -s interceptor.py --listen-port 8080
 ```
 
 ---
 
-# Browser Proxy Configuration
+## Browser Setup
 
-Configure your browser proxy:
-
-```text
-127.0.0.1:8080
-```
-
-Then:
-
-1. Open browser through proxy
-2. Visit:
-
-```text
-http://mitm.it
-```
-
-3. Download the mitmproxy CA certificate
-4. Install the certificate into browser / operating system trust store
-5. Start browsing
-
-Captured traffic will appear automatically in the dashboard.
+1. Set browser proxy to `127.0.0.1:8080`
+2. Visit `http://mitm.it` through the proxy
+3. Install the mitmproxy CA certificate
+4. Browse any HTTPS site — traffic appears in dashboard
 
 ---
 
-# Dashboard Endpoints
+## Pages
 
-| Endpoint | Purpose |
-|---------|---------|
-| `/dashboard` | Main traffic dashboard |
-| `/traffic` | Raw traffic JSON feed |
-| `/analytics` | Analytics dashboard |
-| `/request/<id>` | Request detail inspector |
-| `/export/json` | JSON report export |
-| `/export/html` | HTML report export |
-| `/scope` | Scope configuration API |
-| `/sessions` | Session management API |
+| URL | Description |
+|-----|-------------|
+| `localhost:5000/dashboard` | Main traffic dashboard |
+| `localhost:5000/intercept` | Live intercept mode |
+| `localhost:5000/intruder` | Fuzzer / Sniper attack |
+| `localhost:5000/endpoints` | JS endpoint discovery |
+| `localhost:5000/analytics` | Charts and statistics |
+| `localhost:5000/request/<id>` | Request detail + tools |
+| `localhost:5000/export/json` | Download JSON report |
+| `localhost:5000/export/html` | Download HTML report |
 
 ---
 
-# Configuration
+## Configuration
 
-Edit:
-
-```text
-backend/config.py
-```
-
-Example:
+Edit `backend/config.py`:
 
 ```python
-LAB_MODE = False
+LAB_MODE = True   # Disable TLS verification (local lab only)
+LAB_MODE = False  # Enable TLS verification (real targets)
 ```
-
-Modes:
-
-```python
-LAB_MODE = True
-```
-Disables TLS verification for controlled local lab environments.
-
-```python
-LAB_MODE = False
-```
-Enables TLS verification for authorized external testing.
 
 ---
 
-# Limitations
+## Testing Workflow
 
-InterceptorX is an academic security testing platform and has intentional limitations.
-
-Current limitations:
-- No native interactive intercept-edit-forward UI
-- No crawler / spider module
-- No websocket traffic analysis
-- No extension/plugin ecosystem
-- JWT signature verification not implemented
-- Heuristic vulnerability detection (not exploit confirmation)
-
----
-
-# Intended Use Cases
-
-Suitable for:
-- Cybersecurity academic projects
-- Web application security learning
-- Authorized lab testing
-- Vulnerability demonstration
-- HTTP traffic inspection
-- Request replay experimentation
-
-Not intended as a replacement for enterprise commercial tools.
+1. Start InterceptorX and configure browser proxy
+2. Browse target application normally — traffic captured automatically
+3. Check `/endpoints` for hidden API routes discovered from JS files
+4. Click interesting requests → **Send to Intruder**
+5. Mark injection points with `§markers§`, select wordlist, run Sniper
+6. Filter results by **🎯 Findings only** — review HIGH/CRITICAL results
+7. Use Repeater to manually verify findings
+8. Export HTML report for documentation
 
 ---
 
-# Legal Disclaimer
+## Security Notice
 
-InterceptorX must only be used for:
-- Educational purposes
-- Controlled lab environments
-- Authorized penetration testing
+InterceptorX is designed for:
+- Authorized bug bounty testing
+- Security research on systems you own
+- Educational learning about web security
 
-Unauthorized use may violate laws, policies, or contractual agreements.
+**Never test against systems without explicit written permission.**
 
-The authors assume no responsibility for misuse.
+---
+
+## Requirements
+
+```
+mitmproxy==12.2.2
+Flask==3.1.3
+requests==2.34.0
+```
+
+---
+
+## Legal Disclaimer
+
+InterceptorX is intended for educational purposes and authorized security testing only. The authors are not responsible for any misuse of this tool. Always obtain explicit written permission before testing any target system.

@@ -34,10 +34,11 @@ import active_testing
 import report_export
 import intruder
 import wordlist_store
+import js_extractor
+import intercept_store
 
 app = Flask(__name__)
 
-# CSRF-style token for destructive endpoints
 _CLEAR_TOKEN = secrets.token_hex(16)
 
 
@@ -80,7 +81,7 @@ def request_detail(request_id):
     conn.close()
     if not row:
         return "Request not found", 404
-    req       = db.row_to_dict(row)
+    req = db.row_to_dict(row)
     in_scope, scope_reason = scope.is_in_scope(req["url"])
     return render_template("request_detail.html", req=req,
                            in_scope=in_scope, scope_reason=scope_reason,
@@ -189,10 +190,9 @@ def repeat_request(request_id):
     if not row:
         return jsonify({"error": "Request not found"}), 404
 
-    data     = flask_request.get_json(silent=True) or {}
-    row_d    = db.row_to_dict(row)
+    data  = flask_request.get_json(silent=True) or {}
+    row_d = db.row_to_dict(row)
 
-    # Raw HTTP mode — parse the raw editor content
     raw_http = data.get("raw_http", "").strip()
     if raw_http:
         try:
@@ -209,13 +209,12 @@ def repeat_request(request_id):
             logger.exception("Error in raw repeat")
             return jsonify({"error": "Internal server error"}), 500
 
-    # Standard JSON mode
-    method   = row_d["method"]
-    url      = data.get("url",     row_d["url"])
-    headers  = data.get("headers", row_d["request_headers"])
-    body     = data.get("body",    row_d["request_body"])
-    session  = data.get("session", "default")
-    follow   = data.get("follow_redirects", False)
+    method  = row_d["method"]
+    url     = data.get("url",     row_d["url"])
+    headers = data.get("headers", row_d["request_headers"])
+    body    = data.get("body",    row_d["request_body"])
+    session = data.get("session", "default")
+    follow  = data.get("follow_redirects", False)
 
     try:
         result = repeater.send(method, url, headers, body,
@@ -302,7 +301,6 @@ def active_test(request_id):
     vuln_type       = data.get("type", "sqli").lower()
     custom_payloads = data.get("payloads", [])
 
-    # Scope check before active testing
     in_scope, reason = scope.is_in_scope(row_d["url"])
     if not in_scope:
         return jsonify({"error": f"Out of scope: {reason}"}), 403
@@ -323,10 +321,85 @@ def active_test(request_id):
         logger.exception("Unhandled error in active_test")
         return jsonify({"error": "Internal server error"}), 500
 
+
+# ─── Analytics ────────────────────────────────────────────────────────────────
+
 @app.route("/analytics")
 def analytics():
     return render_template("interceptorx_charts.html")
 
+
+# ─── JS Endpoint Discovery ────────────────────────────────────────────────────
+
+@app.route("/endpoints")
+def endpoints_page():
+    return render_template("endpoints.html")
+
+
+@app.route("/endpoints/data", methods=["GET"])
+def endpoints_data():
+    type_filter = flask_request.args.get("type", "all")
+    search      = flask_request.args.get("search", "").strip()
+    endpoints   = js_extractor.get_all_endpoints(
+        type_filter = type_filter if type_filter != "all" else None,
+        search      = search or None,
+    )
+    counts = {}
+    for ep in js_extractor.get_all_endpoints():
+        t = ep["type"]
+        counts[t] = counts.get(t, 0) + 1
+    return jsonify({
+        "endpoints": endpoints,
+        "total":     len(js_extractor.get_all_endpoints()),
+        "filtered":  len(endpoints),
+        "counts":    counts,
+    })
+
+
+
+@app.route("/endpoints/scan", methods=["POST"])
+def manual_js_scan():
+    """Manually scan a JS URL for endpoints.
+    Routes through mitmproxy so CDN files with Referer restrictions work.
+    """
+    import requests as req_lib
+    data = flask_request.get_json(silent=True) or {}
+    url  = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+    try:
+        # Route through mitmproxy proxy so CDN allowlist check passes
+        proxies = {
+            "http":  "http://127.0.0.1:8080",
+            "https": "http://127.0.0.1:8080",
+        }
+        r = req_lib.get(url, timeout=20, verify=False,
+                       proxies=proxies,
+                       headers={
+                           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                           "Accept": "*/*",
+                           "Accept-Encoding": "gzip, deflate",
+                           "Referer": "https://try.discourse.org/",
+                           "Origin": "https://try.discourse.org",
+                       })
+        if r.status_code != 200:
+            return jsonify({"error": f"HTTP {r.status_code}: {r.text[:100]}"}), 400
+        text = r.text
+        endpoints = js_extractor.extract_endpoints(text, url)
+        if endpoints:
+            added = js_extractor.save_endpoints(endpoints)
+            return jsonify({"found": len(endpoints), "new": added,
+                           "endpoints": endpoints[:20]})
+        return jsonify({"found": 0, "new": 0, "endpoints": [],
+                       "size": len(text),
+                       "sample": text[:200]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/endpoints/clear", methods=["POST"])
+def endpoints_clear():
+    js_extractor.clear_endpoints()
+    return jsonify({"status": "cleared"})
 
 
 # ─── Intruder ─────────────────────────────────────────────────────────────────
@@ -376,17 +449,16 @@ def delete_wordlist(name):
 def run_intruder():
     data = flask_request.get_json(silent=True) or {}
 
-    method         = data.get("method", "GET").upper()
-    url_template   = data.get("url", "").strip()
-    headers_raw    = data.get("headers", {})
-    body_template  = data.get("body", "")
-    wordlist_name  = data.get("wordlist", "params")
+    method          = data.get("method", "GET").upper()
+    url_template    = data.get("url", "").strip()
+    headers_raw     = data.get("headers", {})
+    body_template   = data.get("body", "")
+    wordlist_name   = data.get("wordlist", "params")
     custom_payloads = data.get("custom_payloads", [])
 
     if not url_template:
         return jsonify({"error": "URL is required"}), 400
 
-    # Build payload list
     if custom_payloads:
         payloads = [p.strip() for p in custom_payloads if p.strip()]
     else:
@@ -397,7 +469,6 @@ def run_intruder():
     if not payloads:
         return jsonify({"error": "No payloads selected"}), 400
 
-    # Parse headers
     if isinstance(headers_raw, str):
         try:
             headers_dict = __import__("json").loads(headers_raw)
@@ -406,7 +477,6 @@ def run_intruder():
     else:
         headers_dict = headers_raw or {}
 
-    # Scope check
     import re as _re
     clean_url = _re.sub(r"§([^§]*)§", lambda m: m.group(1), url_template)
     in_scope, reason = scope.is_in_scope(clean_url)
@@ -428,9 +498,8 @@ def run_intruder():
         logger.exception("Intruder error")
         return jsonify({"error": "Internal server error"}), 500
 
-# ─── Intercept Mode ───────────────────────────────────────────────────────────
 
-import intercept_store
+# ─── Intercept Mode ───────────────────────────────────────────────────────────
 
 @app.route("/intercept")
 def intercept_page():
@@ -492,6 +561,7 @@ def intercept_edit(flow_id):
 def intercept_clear():
     intercept_store.clear_queue()
     return jsonify({"status": "cleared"})
+
 
 if __name__ == "__main__":
     app.run(debug=False, port=5000)
